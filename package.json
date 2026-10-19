@@ -1,6 +1,6 @@
 {
   "name": "dsh-terminal-tool",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "description": "Switch the Windows terminal tool from pwsh to the local Git Bash, without touching presets or the global ctx.shell.",
   "license": "MIT",
