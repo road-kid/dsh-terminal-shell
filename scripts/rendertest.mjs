@@ -274,7 +274,7 @@ await test('the row ships the title, one sentence of description and the dialect
   }
 })
 
-await test('the dialect menu lists both kinds and marks the current one', async () => {
+await test('the dialect menu lists every kind and marks the current one', async () => {
   const form = formStub({ dialect: 'pwsh', bashPath: '', bashCandidates: [] })
   const row = mountRow({ form, state: READY_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
@@ -283,13 +283,13 @@ await test('the dialect menu lists both kinds and marks the current one', async 
     await click(view.trigger('终端类型'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['PowerShell（pwsh）', 'Git Bash（bash）'],
+      ['PowerShell（pwsh）', 'Git Bash（bash）', '命令提示符（cmd）'],
     )
     // Selected rows are drawn with a leading check icon; the real primitive has
     // no `aria-selected` attribute to assert on.
     assert.deepEqual(
       view.menuItems().map((item) => item.querySelector('[data-check]') !== null),
-      [true, false],
+      [true, false, false],
     )
     // The card is portaled out of the row, like the real `Menu`.
     assert.equal(view.host.querySelector('[role="menu"]'), null)
@@ -571,6 +571,118 @@ await test('a read-only form locks the dropdown and the Auto-detect button', asy
     assert.equal(view.trigger('受限沙箱时').disabled, true, 'and the confined-policy one')
     assert.equal(view.button('自动发现').disabled, true, 'and the Auto-detect button')
     assert.equal(view.host.querySelector('input[aria-label="Git Bash 路径"]').disabled, true)
+  } finally {
+    await view.unmount()
+  }
+})
+
+// --- cmd dialect ------------------------------------------------------------
+
+/** The `/state` a Windows Host reports; `cmdPath` defaults to empty. */
+const CMD_STATE = { ...READY_STATE, cmdPath: '' }
+
+/** Type into an input the way React sees it, then commit with Enter. */
+async function typeInto(input, text) {
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set
+  await act(async () => {
+    setter.call(input, text)
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  })
+  await act(async () => {
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  })
+  await settle()
+}
+
+await test('choosing cmd reveals the cmd fields and hides the bash ones', async () => {
+  const form = formStub({ dialect: 'pwsh', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    await click(view.trigger('终端类型'))
+    assert.deepEqual(
+      view.menuItems().map((item) => item.textContent),
+      ['PowerShell（pwsh）', 'Git Bash（bash）', '命令提示符（cmd）'],
+    )
+    await click(view.menuItems()[2])
+    const text = view.text()
+    assert.match(text, /cmd\.exe 路径/)
+    assert.match(text, /留空则自动使用系统 cmd\.exe/)
+    assert.match(text, /cmd 的限制/)
+    assert.match(text, /独立的批处理脚本/)
+    assert.match(text, /%~dp0 指向本插件的内部脚本/)
+    assert.match(text, /命令回显无法关闭或恢复/)
+    assert.match(text, /控制台代码页/)
+    // Bash-only fields are gone, not greyed out.
+    assert.doesNotMatch(text, /Git Bash 路径/)
+    assert.doesNotMatch(text, /极简模式/)
+    assert.equal(view.button('自动发现'), undefined)
+    assert.equal(view.triggers().length, 2, 'dialect + cmd sandbox policy only')
+    assert.equal(view.host.querySelector('input[aria-label="cmd.exe 路径"]').value, '')
+    assert.equal(view.host.querySelector('input[aria-label="控制台代码页"]').value, '65001')
+    assert.equal(view.trigger('受限沙箱时').textContent, '受限执行，失败后升级')
+    assert.deepEqual(form.mutations, [[{ op: 'set', path: ['dialect'], value: 'cmd' }]])
+    assert.equal(view.menu(), null)
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('the cmd code page commits a number and rejects junk', async () => {
+  const form = formStub({ dialect: 'cmd', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    const input = view.host.querySelector('input[aria-label="控制台代码页"]')
+    assert.ok(input, 'the code page field is present')
+    assert.equal(input.getAttribute('inputmode'), 'numeric')
+    await typeInto(input, '936')
+    assert.deepEqual(form.mutations, [[{ op: 'set', path: ['cmdCodePage'], value: 936 }]])
+    // Junk is never persisted, and the field snaps back to the last saved value.
+    await typeInto(input, '65001abc')
+    assert.equal(form.mutations.length, 1, 'junk writes nothing')
+    assert.equal(input.value, '936', 'the field rolls back to the last saved value')
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('the cmd path commits and the sandbox choice shows its notice', async () => {
+  const form = formStub({ dialect: 'cmd', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    await typeInto(view.host.querySelector('input[aria-label="cmd.exe 路径"]'), 'C:/Windows/System32/cmd.exe')
+    assert.deepEqual(form.mutations, [
+      [{ op: 'set', path: ['cmdPath'], value: 'C:/Windows/System32/cmd.exe' }],
+    ])
+    // The limits note is on screen, but it is not the "no sandbox" warning.
+    assert.equal(view.host.querySelector('[role="note"]')?.textContent.includes('不受文件沙箱限制'), false)
+    await click(view.trigger('受限沙箱时'))
+    assert.deepEqual(
+      view.menuItems().map((item) => item.textContent),
+      ['受限执行，失败后升级', '直接启动（不经沙箱）'],
+      'cmd has no fail member',
+    )
+    await click(view.menuItems()[1])
+    assert.deepEqual(form.mutations[1], [{ op: 'set', path: ['cmdConfinedPolicy'], value: 'unconfined' }])
+    assert.match(view.text(), /不受文件沙箱限制/)
+    assert.equal(view.trigger('受限沙箱时').textContent, '直接启动（不经沙箱）')
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('the pwsh row never shows a cmd field', async () => {
+  const form = formStub({ dialect: 'pwsh', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    const text = view.text()
+    assert.doesNotMatch(text, /cmd\.exe 路径/)
+    assert.doesNotMatch(text, /控制台代码页/)
+    assert.doesNotMatch(text, /cmd 的限制/)
+    assert.equal(view.triggers().length, 1)
   } finally {
     await view.unmount()
   }

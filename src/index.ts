@@ -4,11 +4,12 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 // into this compilation unit. Erased at build time.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 
-import { Config, snapshotConfig, wantsBash, type ConfigSnapshot, type RawConfig } from './config.ts'
+import { Config, snapshotConfig, type ConfigSnapshot, type RawConfig } from './config.ts'
 import { installSession } from './replace.ts'
 import { createVariantManager, resolveVariantSpec } from './preset.ts'
 import { registerRoutes } from './routes.ts'
 import { writeDiagnostic } from './diag.ts'
+import { sweepStaleScripts } from './cmd/script.ts'
 import type { CapabilityView, Dialect, ReplaceReport } from './shared/protocol.ts'
 
 /**
@@ -83,8 +84,16 @@ export function apply(ctx: Context, config: RawConfig): void {
   // accurate even in that case.
   const initial = snapshotConfig(config)
 
-  if (!wantsBash(initial)) {
+  if (initial.dialect === 'pwsh') {
     writeDiagnostic('loaded with dialect=pwsh; sessions keep the platform terminal tool')
+  } else if (initial.dialect === 'cmd') {
+    // One sweep per host load: a previous host that crashed mid-execution can
+    // leave a scratch directory behind, and this is the only moment where no
+    // cmd process of ours can still be reading from one.
+    const swept = sweepStaleScripts()
+    writeDiagnostic(
+      `loaded with dialect=cmd; cmdPath=${initial.cmdPath === '' ? '(auto)' : initial.cmdPath} codepage=${initial.cmdCodePage} confined=${initial.cmdConfinedPolicy}${swept > 0 ? ` swept=${swept}` : ''}`,
+    )
   }
 
   // The `minimal-gitbash` variant lives and dies with this fiber: the manager
@@ -159,7 +168,9 @@ export function apply(ctx: Context, config: RawConfig): void {
           ? { at: Date.now(), applied: true }
           : { at: Date.now(), applied: false, reason: result.reason }
       if (result.status === 'installed') {
-        writeDiagnostic(`installed session=${id} bash=${result.bashPath}`)
+        const executable = result.cmdPath ?? result.bashPath
+        const kind = result.cmdPath === undefined ? 'bash' : 'cmd'
+        writeDiagnostic(`installed session=${id} ${kind}=${executable}`)
       }
     } catch (error) {
       // Defensive: installSession already contains its own failures.

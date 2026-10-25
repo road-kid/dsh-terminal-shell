@@ -38,13 +38,24 @@ export interface ConfigFormLike<T> {
   mutate(ops: readonly FieldOp[], expectedRevision?: number): Promise<boolean>
 }
 
-/** Values this plugin stores in its own entry Config. */
+/**
+ * Values this plugin stores in its own entry Config.
+ *
+ * Mirrors `Config` in `src/config.ts` field for field, but only the fields this
+ * row edits. `cmdConfinedPolicy` is deliberately *not* `confinedPolicy`: the two
+ * dialects have different legal sets (cmd has no `fail`, because `cmd.exe` starts
+ * under a restricted token while Git Bash does not), so sharing one field would
+ * force one dialect to carry a value it cannot honour.
+ */
 export interface TerminalToolValues {
-  readonly dialect?: 'pwsh' | 'bash'
+  readonly dialect?: 'pwsh' | 'bash' | 'cmd'
   readonly bashPath?: string
   readonly bashCandidates?: readonly string[]
   readonly confinedPolicy?: 'unconfined' | 'escalate' | 'fail'
   readonly minimalMode?: 'leave' | 'oneshot' | 'variant'
+  readonly cmdPath?: string
+  readonly cmdCodePage?: number
+  readonly cmdConfinedPolicy?: 'escalate' | 'unconfined'
 }
 
 /** A locale dictionary. */

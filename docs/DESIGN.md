@@ -6,9 +6,9 @@
 | 插件 entry id | `terminal-shell` |
 | 目标宿主 | DeepSeek Harness `>=0.2.1-rc.2 <0.3.0`（Windows / Desktop profile） |
 | 契约基线 | 各第一方包 `lib/types/*.d.ts`（0.2.1-rc.2，npm 实数） |
-| 文档状态 | 实现定稿（0.5.0）：新增 `minimalMode` 与 `minimal-gitbash` 预设变体（§13） |
+| 文档状态 | 实现定稿（0.2.0）：在 0.1.x 的 `bash` 方言之上新增 `cmd` 方言（§14） |
 
-> **临时替代方案**：DSH 还没有内置的「终端 / Git Bash 选择」能力，Windows 上平台组合只提供 PowerShell。**在官方能力落地前，本插件是它的临时替代方案**：复用官方执行器与工具，在 `agent/created` 里把新会话的终端换成 Git Bash；Windows 受限档位下的 `confinedPolicy` 也属于这段临时接线，不改变宿主沙箱本身。**官方提供等价设置后即可停用本插件**——移除 profile 里的插件行并重启，新会话即回到官方终端工具。插件不改 DSH 安装目录、不改任何 preset、不接管全局 `ctx.shell`，配置只落当前 profile 的 patch 层，卸载无残留。
+> **临时替代方案**：DSH 还没有内置的「终端 / shell 选择」能力，Windows 上平台组合只提供 PowerShell。**在官方能力落地前，本插件是它的临时替代方案**：复用官方执行器与工具，在 `agent/created` 里把新会话的终端换成 Git Bash 或 `cmd.exe`；Windows 受限档位下的 `confinedPolicy` 也属于这段临时接线，不改变宿主沙箱本身。**官方提供等价设置后即可停用本插件**——移除 profile 里的插件行并重启，新会话即回到官方终端工具。插件不改 DSH 安装目录、不改任何 preset、不接管全局 `ctx.shell`，配置只落当前 profile 的 patch 层，卸载无残留。
 
 ---
 
@@ -42,12 +42,15 @@ DSH 在 Windows 上只组合 PowerShell 执行器：`@deepseek-ai/dsh-base` 的�
 | F14 | 原生 Windows 程序中文输出乱码缓解 | 注入 `PYTHONIOENCODING=utf-8`（仅当未设置） |
 | F15 | 受限沙箱策略：`unconfined` / `escalate` / `fail`，默认 `unconfined` | `src/confined.ts` 的 `planLaunch` + 执行器分支 |
 | F16 | 极简模式：`minimalMode` 三值（默认 `oneshot`）；`variant` 下注册 `minimal-gitbash` 预设变体并接持久 Git Bash 后端 | `src/config.ts` 的 `minimalMode` + `src/preset.ts` + `src/pty.ts`（`dsh-terminal-shell/pty` 入口），见 §13 |
+| F17 | 第三种方言 `cmd`：会话拿到 `cmd` 工具，`pwsh`/`bash` 隐藏，`tool:cmd` 提示词段到位 | `src/cmd/tool.ts`（官方 `dsh-tool-bash` 的逐字移植）+ `installCmdSession`，见 §14 |
+| F18 | `cmd` 的传输、发现、启动判定与配置面（`cmdPath` / `cmdCodePage` / `cmdConfinedPolicy`） | `src/cmd/{script,discover,executor}.ts` + `src/config.ts`，见 §14 |
 
 ### 1.3 明确不做
 
 - 不接管全局 `ctx.shell`，不动 `dsh-base` / 任何 preset 快照，不改 DSH 安装目录。
 - 不修改宿主沙箱实现，也不自行实现升级审批：`escalate` 的 `approveEscalation` 仍由第一方 `dsh-tool-bash` 负责，插件只把 MSYS 启动失败标成 `denied`。默认 `unconfined` 会绕过文件沙箱，但这是配置面的显式选择（见 2.4），不是隐式旁路。
 - 不改写官方 `minimal` 预设，也不接管官方持久终端注册表。持久 shell 等价物以**新增预设** `minimal-gitbash` 交付（§13），官方定义只读、原样保留；没有会话引用时变体自行注销。
+- **不提供 `cmd` 的持久 PTY**。`ShellDialect` 只有 `'bash' | 'pwsh'`，且 `cmd.exe` 没有 OSC-133 语义，做出来只会是「看起来像终端、实际上不能用」的东西。`cmd` 方言是一次性批处理（§14）。
 
 ---
 
@@ -704,3 +707,139 @@ Host 侧，客户端只读状态。
 `terminals` 注册表；本插件的 `pty` 入口只在某个预设的持久终端组里注册后端。两者不共享
 注册表，也不互相读写状态。官方 bundle 已安装时，变体预设的组里仍是官方 `pty` 行在前、
 本插件的 `gitbash-pty` 行在后，`terminal_*` 工具由前者提供，`bash` 走后者。
+
+---
+
+## 14. CMD 方言（0.2.0）
+
+`dialect: cmd` 是第三个方言。它和前两个**不是同一个形状**：`bash` 方言的全部工作是把
+官方 `dsh-tool-bash` 的执行器换掉，`cmd` 方言连工具本身都要自己带。完整的方案、评审与
+实测证据见 [`docs/PLAN-cmd-dialect.md`](PLAN-cmd-dialect.md) 与
+[`docs/REVIEW-cmd-dialect.md`](REVIEW-cmd-dialect.md)；本节只记落地后的设计事实与理由。
+
+### 14.1 为什么不能复用官方工具
+
+官方 `@deepseek-ai/dsh-tool-bash` 与 `@deepseek-ai/dsh-tool-pwsh` 的模块导出只有
+`{Config, apply, inject, name}`，工具名（`bash` / `pwsh`）、提示词段（`tool:bash` /
+`tool:pwsh`）、`approveEscalation` 的 `toolName`、作业类型（`kind:'bash'`）全部是写死的
+字面量。`cmd` 需要换掉其中四项，而官方没有工厂函数，所以 `src/cmd/tool.ts` 是把官方
+`lib/index.js` **逐字移植**过来再改标识，共 1011 行。
+
+移植的纪律：**行为一行不改，只改标识与类型**。与官方的差异全部落在类型层，共 7 处
+（`interface Config` 与 `const Config` 声明合并、三处显式返回类型标注以保住 `oneOf` 的
+字面量 `kind`、`RenderableCmdResult` 收窄、`PresentedToolResult` 结构化拓宽、
+`approveCmdEscalation` 补 fail-closed 守卫、局部句柄 `process`→`proc` 避免遮蔽全局、
+两个 type-only 副作用 import）。官方代码更新时需要重新 diff 一次。
+
+### 14.2 传输：临时 `.cmd` 脚本
+
+`cmd.exe` 无法像 `bash -c` 那样接收命令。实测（`docs/probes/cmd-transport.mjs`）：
+
+| 传法 | 结果 |
+|---|---|
+| `cmd /c <command>` 单元素 | Node 把引号转义成 `\"`，`cmd` 不认 |
+| 多元素 argv | 同样被改写 |
+| 环境变量一次性传入 | 简单命令可用，但**首字符是引号即失败**、`%PATH%` 不展开、多行只取第一行 |
+| stdin（`cmd /d /q`） | banner + 提示符 + `More?`，不可用 |
+| **临时 `.cmd` 脚本** | 引号原样、`%VAR%` 正常展开、多行正常、`exit /b N` 正确 |
+
+因此 `src/cmd/script.ts` 为每次执行写一个 `cmd-<uuid>.cmd` 到该执行器私有的 scratch
+目录（`os.tmpdir()` 下 `dsh-cmd-<uuid>`），模板见 `renderCmdScript`。三条硬性约束：
+
+1. **`cd` 守卫必须在**。脚本从 scratch 目录启动，工作目录若已不存在，没有守卫时命令会在
+   scratch 目录里**静默执行并 exit 0**——模型会以为命令跑在会话目录里。守卫写法
+   `cd /d "<dir>" 2>nul || (echo … 1>&2 & exit /b 1)`，UNC 用 `pushd`。
+2. **不加尾部 `exit /b %errorlevel%`**。批处理脚本的退出码本来就是最后一条命令的退出码；
+   显式写会把 `dir /nonexistent & echo recovered` 的 `0` 改掉。
+3. **裸名传参 + `cwd` 设脚本目录**。绝对路径形态在 scratch 路径含 `&` `(` `)` `^` `,`
+   `;` `%` 时全部失败；裸名形态全部成功（`docs/probes/cmd-transport.mjs`）。
+
+生命周期：`materializeCmd` 返回 `CmdScript`，执行器用
+`Map<ShellProcess, CmdScript>` + `executeArgv` 的 `onStarted` 登记、`onProcessDone`
+释放。`executeArgv` 在**准备阶段超时**时不会调用 `onStarted`（基类行为），所以还有
+`registered` 标志 + `finally { if (!registered) script.dispose() }` 兜底，否则那条路径会
+泄漏脚本文件。`sweepStaleScripts()` 在插件启动时清 24 小时前的残留。
+
+### 14.3 启动判定：`planCmdLaunch` 不复用 `planLaunch`
+
+`src/confined.ts` 的 `planLaunch` 把「Windows 受限令牌下 shell 起不来」写死在 win32 分支，
+这是 Git Bash / MSYS2 的事实（`NtCreateDirectoryObject 0xC0000022`）。`cmd.exe` 恰恰相反：
+官方 `dsh-sandbox-local` 的功能探针本身就是 `cmd /c exit 0`。所以 `cmd` 有自己的四分支
+判定（`src/cmd/executor.ts`）：无沙箱或无 policy → `direct`；`danger-full-access` →
+`direct`；`escalate` → `confine`；`unconfined` → `direct`。**没有 `fail` 档**——`cmd`
+不存在「受限下起不来」这种情况，`fail` 只会变成没有意义的拒绝。
+
+### 14.4 装配：`installCmdSession`
+
+`src/replace.ts` 的方言闸门位于 **preset 守卫之后**：
+
+```
+非 win32 → skip
+agentCtx = agent.ctx
+无 agentCtx → skip
+preset 是 VARIANT_ID → skip
+preset 是 MINIMAL_ID 且 minimalMode !== 'oneshot' → skip   ← 让位语义在这里
+dialect === 'pwsh' → skip('dialect-pwsh')
+dialect === 'cmd'  → installCmdSession(...)
+dialect === 'bash' → 原路径
+```
+
+闸门放在 preset 守卫之前会绕过让位语义：`minimal` 会话会同时拿到持久终端和 `cmd` 工具，
+而 `restrict({deny:['pwsh','bash']})` 还会剥掉持久终端预设自己的工具。闸门也必须放在
+`const agentCtx = agent.ctx` 之后，否则 TS2448。
+
+`installCmdSession` 的每一步都用 **`agentCtx`**，不用根 ctx：根 ctx 上调
+`tools.restrict()` 会抛 `tools.restrict() requires a scoped context (agent.ctx)`，
+而 `systemPrompt.section()` 落 global 层会污染所有会话。顺序是：
+`discoverCmd` → `agentCtx.isolate('shell')` → `plugin(CmdExecutor)` → `plugin(ToolCmd)`
+→ 校验 `tools.get('cmd')` → `restrict({deny: 实际可见的 pwsh/bash})` → 压空
+`tool:pwsh`/`tool:bash` 段落 → 注册 `tool:cmd` 段落 → `agentCtx.effect` 逆序 undo。
+任何一步失败都逆序回滚到「会话保持官方 pwsh」，只写诊断，不抛穿 `agent/created`。
+
+**`tool:cmd` 段落只有一处注册点**（`installCmdSession`）。cordis 的 `NamedEntries`
+同层重名会抛错，而 `isolate('shell')` 出来的子 ctx 与 `agentCtx` 是同一个 scope
+（`dsh-scope` 的 `kScope` 沿原型链继承），两处都注册必然冲突。
+
+### 14.5 沙箱与编码
+
+- `cmdConfinedPolicy`：`escalate`（默认）/ `unconfined`。与 `confinedPolicy` 是两个独立
+  字段，回退方向相反：`confinedPolicy` 回退 `unconfined`（因为受限下 Git Bash 起不来），
+  `cmdConfinedPolicy` 回退 `escalate`（因为受限下 `cmd` 起得来）。
+- **`sandbox.denied` 的已知缺口**：它依赖 provider 的 stderr 签名。中文 Windows 上
+  `cmd` 的拒绝信息是 GBK 中文，英文签名 `is not recognized as an internal or external
+  command` 永不命中——沙箱仍然生效（命令确实被拦），只是 `denied` 标记可能为 `false`。
+  插件不伪造这个判定。
+- 编码：脚本以 UTF-8 无 BOM 写入，首行 `chcp <cmdCodePage>>nul`（默认 65001）。CRLF 不是
+  功能必需（LF-only 实测正常，含括号块与 `for /l`），只为兼容旧式批处理工具链而统一使用。
+- **`/q` 不可恢复**：`cmd.exe /q` 关掉命令回显，脚本里写 `@echo on` 也压不过它。这条写进
+  了 `cmdDescription()`，因为它是模型会踩的坑。
+
+### 14.6 提示词与工具描述
+
+`src/cmd/prompt.ts` 导出 `CMD_PROMPT_SECTION`，注册为 `tool:cmd` 段，order 取
+`systemPrompt.getSectionOrder('TOOL_PWSH')`（官方 `PromptSectionOrderName` 没有
+`TOOL_CMD`，而 `getSectionOrder` 返回 `number` 非可选，没有 fallback 可写）。
+`cmdDescription()` 按方言重写官方描述，额外写明：一次性批处理、`%VAR%` 展开、
+`%~dp0`/`%0`/`%1`–`%9`/`%*` 指向内部脚本、回显不可恢复、非 ASCII 依赖代码页。
+
+### 14.7 配置与客户端
+
+新增三个 volatile 字段 `cmdPath` / `cmdCodePage` / `cmdConfinedPolicy`，`dialect` 扩展为
+三值。客户端按方言切换显示的字段组：`cmd` 下显示 `cmd.exe` 路径、控制台代码页、受限
+沙箱时三行，隐藏 `loginShell` / `extraPath` / `pythonUtf8` / `minimalMode` / bash 的
+`confinedPolicy`。`cmd` 行始终带一条限制说明（`row.cmd.limits`），所以「无沙箱警告」
+类断言必须查文案内容而非节点存在性。
+
+### 14.8 测试
+
+- `scripts/cmdunittest.mjs`（30 断言）：脚本模板、发现三步回退、`planCmdLaunch` 四分支，
+  含 7 条真 spawn `cmd.exe` 的用例与一条 P1-6 泄漏回归护栏。
+- `scripts/cmdtest.mjs`：端到端矩阵（T-BASIC / T-QUOTE / T-VAR / T-OP / T-MULTI / T-ENC /
+  T-EXIT / T-CWD / T-TIME / T-SBX / T-INSTALL / T-REGRESS），全部真跑 `cmd.exe`。
+- 两者都已接进 `npm run check`。
+
+### 14.9 已知限制（`cmd.exe` 固有）
+
+一次性批处理（`pause` / `set /p` 会挂到超时）、回显不可恢复、`%~dp0` 指向内部脚本、
+非 ASCII 依赖代码页、`sandbox.denied` 可能缺失、无持久 PTY。这些都在 README 的
+「已知限制」第 9 条里对用户明说。

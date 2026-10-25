@@ -10,6 +10,10 @@ import { executorConfig, type ConfigSnapshot } from './config.ts'
 import { GitBashExecutor } from './executor.ts'
 import { bashInstallRoot, bashPathEntries } from './paths.ts'
 import { discoverBash } from './discover.ts'
+import { CmdExecutor } from './cmd/executor.ts'
+import { discoverCmd } from './cmd/discover.ts'
+import { CMD_PROMPT_SECTION } from './cmd/prompt.ts'
+import * as ToolCmd from './cmd/tool.ts'
 import { MINIMAL_ID, VARIANT_ID } from './preset.ts'
 
 /**
@@ -87,7 +91,6 @@ export async function installSession(
   const id = String(agent.id)
 
   if (process.platform !== 'win32') return { status: 'skipped', reason: skip(id, 'not-win32') }
-  if (snapshot.dialect !== 'bash') return { status: 'skipped', reason: skip(id, 'dialect-pwsh') }
 
   const agentCtx = agent.ctx
   if (agentCtx === undefined) return { status: 'skipped', reason: skip(id, 'no-agent-context') }
@@ -107,6 +110,19 @@ export async function installSession(
   if (preset === MINIMAL_ID && snapshot.minimalMode !== 'oneshot') {
     return { status: 'skipped', reason: skip(id, 'minimal-left', snapshot.minimalMode) }
   }
+
+  // The dialect gate lives *here* — after the preset guards and before any
+  // mount — for two reasons:
+  //
+  // 1. Above the preset guards it would bypass the "leave the preset alone"
+  //    semantics: under `minimalMode: variant` the persistent terminal preset
+  //    already owns the terminal, and mounting a cmd tool next to it would give
+  //    the agent two terminal tools; worse, denying `pwsh`/`bash` there would
+  //    strip the preset's own tools.
+  // 2. It must come after `agentCtx` is read, because `installCmdSession` takes
+  //    that context and a declaration-order mistake is a TS2448.
+  if (snapshot.dialect === 'pwsh') return { status: 'skipped', reason: skip(id, 'dialect-pwsh') }
+  if (snapshot.dialect === 'cmd') return installCmdSession(agent, agentCtx, snapshot)
 
   const tools = optional<ToolRuntime>(agentCtx, 'tools')
   const systemPrompt = optional<SystemPrompt>(agentCtx, 'systemPrompt')
@@ -234,6 +250,158 @@ export async function installSession(
     }
     const detail = error instanceof Error ? error.message : String(error)
     return { status: 'skipped', reason: skip(id, 'mount-failed', detail) }
+  }
+}
+
+/**
+ * Install the cmd dialect into one agent's scope.
+ *
+ * Structurally identical to the bash path, with three differences that are
+ * load-bearing:
+ *
+ * 1. It takes `agentCtx` and never the root context. `tools.restrict()` throws on
+ *    a context-global scope ("a context-global restriction would mask every
+ *    agent"), and `systemPrompt.section()` on the root would leak the `tool:cmd`
+ *    section — and the blanked `tool:pwsh` one — into every session.
+ * 2. It denies *both* inherited shell tools, but only the ones actually visible:
+ *    `restrict` rejects unknown names, and a preset may have re-mounted
+ *    `tool-bash` inside this agent's realm even on Windows.
+ * 3. The `tool:cmd` section is registered here and nowhere else. `NamedEntries`
+ *    throws on a duplicate name in one scope, so `ToolCmd.apply()` must not also
+ *    register it.
+ */
+async function installCmdSession(
+  agent: Agent,
+  agentCtx: Context,
+  snapshot: ConfigSnapshot,
+): Promise<InstallResult> {
+  const id = String(agent.id)
+
+  const tools = optional<ToolRuntime>(agentCtx, 'tools')
+  const systemPrompt = optional<SystemPrompt>(agentCtx, 'systemPrompt')
+  if (tools === undefined) return { status: 'skipped', reason: skip(id, 'missing-service', 'tools') }
+  if (systemPrompt === undefined) {
+    return { status: 'skipped', reason: skip(id, 'missing-service', 'systemPrompt') }
+  }
+
+  // Idempotency: a retry, or a previous install that survived, already has `cmd`.
+  if (tools.get('cmd', agent) !== undefined) {
+    return { status: 'skipped', reason: skip(id, 'already-replaced') }
+  }
+
+  // Resolve cmd.exe before touching the tree, so a broken configuration has no
+  // side effects at all.
+  const found = discoverCmd(snapshot.cmdPath)
+  if (found === undefined) {
+    return {
+      status: 'skipped',
+      reason: skip(id, 'cmd-not-found', 'no cmd.exe via cmdPath, ComSpec or %SystemRoot%'),
+    }
+  }
+  if (snapshot.cmdCodePage !== 65001) {
+    warn(
+      id,
+      `cmdCodePage=${snapshot.cmdCodePage}: the harness decodes child output as UTF-8, so non-ASCII output will contain replacement characters`,
+    )
+  }
+
+  const undo: (() => void)[] = []
+  const fibers: { dispose: () => Promise<void> }[] = []
+
+  try {
+    const shellCtx = agentCtx.isolate('shell')
+
+    const executorHost = await shellCtx.plugin(CmdExecutor, {
+      ...executorConfig(snapshot),
+      cmdPath: found.path,
+      pathEntries: [...snapshot.extraPath],
+      codePage: snapshot.cmdCodePage,
+      pythonUtf8: snapshot.pythonUtf8,
+      confinedPolicy: snapshot.cmdConfinedPolicy,
+    })
+    fibers.push(executorHost)
+
+    const toolHost = await shellCtx.plugin(ToolCmd, {
+      enableRunInBackground: true,
+      promoteOnTimeout: true,
+    })
+    fibers.push(toolHost)
+
+    // Verify the mount produced the tool before hiding anything: if `cmd` never
+    // appeared, denying the inherited tools would leave the agent with no
+    // terminal tool at all.
+    if (tools.get('cmd', agent) === undefined) {
+      throw new Error('tool-cmd mounted but did not register a cmd tool')
+    }
+
+    const inherited = ['pwsh', 'bash'].filter((name) => tools.get(name, agent) !== undefined)
+    if (inherited.length > 0) {
+      undo.push(tools.restrict({ deny: inherited }))
+      for (const name of inherited) {
+        const section = name === 'pwsh' ? 'tool:pwsh' : 'tool:bash'
+        try {
+          undo.push(
+            systemPrompt.section({
+              name: section,
+              order: systemPrompt.getSectionOrder(name === 'pwsh' ? 'TOOL_PWSH' : 'TOOL_BASH'),
+              text: '',
+            }),
+          )
+        } catch (error) {
+          warn(
+            id,
+            `could not blank the ${section} prompt section: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+    } else {
+      warn(id, 'no inherited shell tool to hide; leaving the inherited tool list alone')
+    }
+
+    // `tool:cmd` shares the order of the section it replaces: exactly one shell
+    // tool is described to the model, in the slot the shell section always had.
+    undo.push(
+      systemPrompt.section({
+        name: 'tool:cmd',
+        order: systemPrompt.getSectionOrder('TOOL_PWSH'),
+        text: CMD_PROMPT_SECTION,
+      }),
+    )
+
+    agentCtx.effect(() => () => {
+      for (const disposer of undo.reverse()) {
+        try {
+          disposer()
+        } catch {
+          // Disposal is best-effort; the fiber tree is the real safety net.
+        }
+      }
+    })
+
+    note(
+      id,
+      `cmd=${found.path} source=${found.source} codepage=${snapshot.cmdCodePage} confined=${snapshot.cmdConfinedPolicy}`,
+    )
+    // `bashPath` carries the executable on both dialects until the field is
+    // renamed in a separate change: `src/index.ts` and `src/routes.ts` read it.
+    return { status: 'installed', bashPath: found.path, cmdPath: found.path }
+  } catch (error) {
+    for (const disposer of undo.reverse()) {
+      try {
+        disposer()
+      } catch {
+        // ignore
+      }
+    }
+    for (const fiber of fibers.reverse()) {
+      try {
+        await fiber.dispose()
+      } catch {
+        // ignore
+      }
+    }
+    const detail = error instanceof Error ? error.message : String(error)
+    return { status: 'skipped', reason: skip(id, 'cmd-mount-failed', detail) }
   }
 }
 

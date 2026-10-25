@@ -235,6 +235,23 @@ function readCmdConfinedPolicy(value: unknown): CmdConfinedPolicy {
   return resolved === 'unconfined' ? 'unconfined' : 'escalate'
 }
 
+/** Code page the `cmd` dialect switches to by default (UTF-8). */
+const DEFAULT_CMD_CODE_PAGE = 65001
+
+/**
+ * Read `cmdCodePage`.
+ *
+ * `chcp` accepts 1..65535; anything outside that range would either error inside
+ * the batch file (harmless but pointless) or, worse, be read as "keep the
+ * current code page" (`chcp 0`), which is not what the user asked for. Fall back
+ * to UTF-8 rather than passing a value cmd cannot honour.
+ */
+function readCodePage(value: unknown): number {
+  const resolved = Math.trunc(Number(read<number>(value, DEFAULT_CMD_CODE_PAGE)))
+  if (!Number.isFinite(resolved) || resolved < 1 || resolved > 65535) return DEFAULT_CMD_CODE_PAGE
+  return resolved
+}
+
 /** Read the dialect, mapping anything unknown to `pwsh` (the safe no-op). */
 function readDialect(value: unknown): Dialect {
   const resolved = read<string>(value, 'pwsh')
@@ -279,7 +296,7 @@ export function snapshotConfig(config: RawConfig): ConfigSnapshot {
     pythonUtf8: read<boolean>(source.pythonUtf8, true) !== false,
     confinedPolicy: readConfinedPolicy(source.confinedPolicy),
     cmdPath: read<string>(source.cmdPath, '').trim(),
-    cmdCodePage: Math.max(0, Math.trunc(Number(read<number>(source.cmdCodePage, 65001)) || 65001)),
+    cmdCodePage: readCodePage(source.cmdCodePage),
     cmdConfinedPolicy: readCmdConfinedPolicy(source.cmdConfinedPolicy),
     minimalMode: readMinimalMode(source.minimalMode),
     cwd: read<string>(source.cwd, '') || undefined,

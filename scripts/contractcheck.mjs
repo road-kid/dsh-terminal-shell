@@ -186,6 +186,9 @@ await test('Config validates and every plugin field is volatile', async () => {
     'pythonUtf8',
     'confinedPolicy',
     'minimalMode',
+    'cmdPath',
+    'cmdCodePage',
+    'cmdConfinedPolicy',
   ]) {
     assert.equal(typeof value[field]?.get, 'function', `${field} must be volatile`)
   }
@@ -207,9 +210,28 @@ await test('Config defaults leave the session on pwsh', () => {
   assert.equal(value.minimalMode.get(), 'oneshot')
 })
 
-await test('Config rejects an unknown dialect', () => {
-  const result = mod.Config['~standard'].validate({ dialect: 'cmd' })
-  assert.notEqual(result.issues, undefined)
+await test('Config accepts all three dialects and rejects anything else', () => {
+  for (const dialect of ['pwsh', 'bash', 'cmd']) {
+    const result = mod.Config['~standard'].validate({ dialect })
+    assert.equal(result.issues, undefined, `dialect ${dialect} must be accepted`)
+    assert.equal(result.value.dialect.get(), dialect)
+  }
+  for (const dialect of ['powershell', 'CMD', 'sh']) {
+    assert.notEqual(
+      mod.Config['~standard'].validate({ dialect }).issues,
+      undefined,
+      `dialect ${dialect} must be rejected`,
+    )
+  }
+})
+
+await test('the cmd fields default to an auto-discovered UTF-8 shell', () => {
+  const value = mod.Config['~standard'].validate({}).value
+  assert.equal(value.cmdPath.get(), '')
+  assert.equal(value.cmdCodePage.get(), 65001)
+  // Opposite default from the bash `confinedPolicy`: cmd.exe does start under the
+  // restricted token, so confining it is the safe default rather than a hazard.
+  assert.equal(value.cmdConfinedPolicy.get(), 'escalate')
 })
 
 await test('built bundle keeps first-party packages external', async () => {

@@ -24,19 +24,64 @@ sandbox, and so on).
 | `0.4.1` | `0.1.5` | stop advertising a sandbox the executor bypasses |
 | `0.5.0` | `0.1.6` | minimal mode and a persistent Git Bash preset |
 | `0.5.1` | `0.1.7` | the persistent terminal under test |
+| — | `0.2.0` | the `cmd.exe` dialect |
 
 Design documents written before the renumber keep the numbers they were written with
 (`docs/PLAN-minimal-mode.md` describes `0.5.0`/`0.5.1`, `docs/PLAN-confined-bash.md`
 describes `0.4.0`, and `docs/PLAN-cmd-dialect.md` cites `0.4.1`/`0.5.1`); those are
 historical records of what the versions were called at the time. Use the table above
-to translate them. The first version actually published under the new numbering is
-`0.1.7`; `0.2.0` is the next feature release (the `cmd` dialect).
+to translate them. The first version actually published under the new numbering was
+`0.1.7`; `0.2.0` is the `cmd.exe` dialect.
 
 ## [Unreleased]
 
-### Planned
+## [0.2.0]
 
-- A third terminal dialect for `cmd.exe` — see `docs/PLAN-cmd-dialect.md`.
+### Added
+
+- **A third terminal dialect: `cmd.exe`.** `dialect` now accepts `cmd` alongside
+  `pwsh` and `bash`. A `cmd` session gets a `cmd` tool, and `pwsh`/`bash` are hidden
+  from it. This is the first dialect that is **not** built on
+  `@deepseek-ai/dsh-tool-bash`: the tool itself (`src/cmd/tool.ts`) is a port of the
+  official one, because the official tool is hard-wired to `bash`/`pwsh` and to their
+  sandbox story. `cmd.exe` needs a different transport, a different launch decision,
+  and a different prompt section.
+- `cmdPath`, `cmdCodePage` (default `65001`), and `cmdConfinedPolicy`
+  (`escalate` default, or `unconfined`) settings, plus three matching rows in the
+  settings panel. Only the cmd dialect shows them; `bashPath` and friends stay hidden
+  while `cmd` is selected.
+- `src/cmd/script.ts`: the transport. Every call is materialised as a temporary
+  `.cmd` script in a per-executor scratch directory, and `cmd.exe` is spawned with
+  `['/d', '/q', '/c', <bare file name>]` and `cwd` set to that directory. Passing the
+  command as an argument does not work: `cmd`'s own quoting rules mangle quotes,
+  `%VAR%` expansion, and multi-line input. Running the script by bare name is also the
+  only form that survives `&`, `(`, `)`, `^`, `,`, `;`, and `%` in the scratch path.
+- `src/cmd/executor.ts`: `CmdExecutor extends LocalBashExecutor`, with its own
+  `planCmdLaunch()` instead of reusing `planLaunch()`. The existing decision encodes
+  "Git Bash cannot start under the restricted token on Windows", which is the opposite
+  of `cmd.exe`: the official Windows sandbox's own capability probe is `cmd /c exit 0`.
+- `src/cmd/discover.ts`: `cmdPath` → `%ComSpec%` → `%SystemRoot%\System32\cmd.exe`.
+- `scripts/cmdunittest.mjs` (unit, spawns real `cmd.exe`) and `scripts/cmdtest.mjs`
+  (end-to-end matrix), both wired into `npm run check`.
+
+### Fixed
+
+- The dialect gate in `installSession` ran before the preset guards, so a `minimal`
+  session could have been given a cmd tool on top of its own persistent terminal.
+  The gate now runs after `VARIANT_ID`/`MINIMAL_ID` have had their say.
+- `installSession` reads `tools` and `systemPrompt` from `agent.ctx`. The cmd path
+  briefly used the root context, where `tools.restrict()` throws
+  (`a context-global restriction would mask every agent`) and where a prompt section
+  would leak into every session.
+
+### Notes
+
+- `cmd` commands cannot be made interactive: each call is a fresh batch script, so
+  `pause`, `set /p`, and any prompt will hang until the timeout.
+- Command echoing is disabled for the whole call (`cmd.exe /q`) and is not restored.
+- `%~dp0`, `%0`, and `%1`–`%9` resolve against the plugin's internal script, not the
+  model's command.
+- Non-ASCII output depends on the console code page; `cmdCodePage` is the escape hatch.
 
 ## [0.1.7]
 

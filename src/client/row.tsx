@@ -11,11 +11,13 @@ import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   createRowController,
   knownPaths,
+  normalizeDialect,
   type Dialect,
   type MinimalMode,
   type RowController,
   type RowState,
 } from './store.ts'
+import type { CmdConfinedPolicy } from '../cmd/types.ts'
 import type { ConfinedPolicy } from '../confined.ts'
 import type { RowProps } from './types.ts'
 
@@ -46,10 +48,22 @@ import type { RowProps } from './types.ts'
  *   becomes a dropdown once the sweep found more than one bash.
  * - **The input is uncontrolled between commits** so a settings round trip
  *   cannot eat keystrokes.
+ * - **Fields follow the dialect, and nothing else.** `pwsh` shows the dialect
+ *   choice only; `bash` shows the bash path, the sandbox policy and the minimal
+ *   mode; `cmd` shows the `cmd.exe` path, the code page and its own sandbox
+ *   policy. A field is never rendered "greyed out" for a dialect that cannot
+ *   honour it — it is simply absent, so the row cannot suggest a setting that
+ *   does nothing.
  */
 
 /** Id of the path control, used by the visible label. */
 const PATH_CONTROL_ID = 'dsh-terminal-shell-path'
+
+/** Id of the `cmd.exe` override field. */
+const CMD_PATH_CONTROL_ID = 'dsh-terminal-shell-cmd-path'
+
+/** Id of the console code page field. */
+const CODE_PAGE_CONTROL_ID = 'dsh-terminal-shell-cmd-codepage'
 
 /** Follow one store field. */
 function useStoreState(controller: RowController): RowState {
@@ -108,14 +122,34 @@ function Selector(props: {
   )
 }
 
+/**
+ * Parse a hand-typed code page.
+ *
+ * Strict on purpose: `chcp` accepts a handful of magic values (`437`, `65001`,
+ * `936`, …) and nothing else, and the batch file bakes the number in verbatim.
+ * `Number.parseInt` would happily turn `65001abc` into `65001`, which silently
+ * saves a value the user did not type, so the shape is checked first.
+ *
+ * @returns the code page, or `undefined` when the text is not a positive integer.
+ */
+function parseCodePage(text: string): number | undefined {
+  const raw = text.trim()
+  if (!/^\d+$/.test(raw)) return undefined
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined
+  return parsed
+}
+
 export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
   // One controller per mounted row: `useState` keeps it stable across renders.
   const [controller] = useState(() => createRowController(form, t))
   const state = useStoreState(controller)
 
-  // The path draft lives in component state and is pushed on blur or Enter; the
-  // effect below re-seeds it whenever the Host value changes.
+  // The drafts live in component state and are pushed on blur or Enter; the
+  // effects below re-seed them whenever the Host value changes.
   const [draft, setDraft] = useState(state.bashPath)
+  const [cmdDraft, setCmdDraft] = useState(state.cmdPath)
+  const [codePageDraft, setCodePageDraft] = useState(String(state.cmdCodePage))
 
   // `start()` is self-contained (one `/state` read plus a form subscription) and
   // its return value tears both down, so the effect can simply start and stop it
@@ -127,31 +161,72 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
     setDraft(state.bashPath)
   }, [state.bashPath])
 
+  useEffect(() => {
+    setCmdDraft(state.cmdPath)
+  }, [state.cmdPath])
+
+  useEffect(() => {
+    setCodePageDraft(String(state.cmdCodePage))
+  }, [state.cmdCodePage])
+
   // Nothing to show until we know the platform; a Linux/macOS Host hides the
   // row entirely (the plugin's replacement is Windows-only).
   if (state.status !== 'ready') return null
 
   const controlsEnabled = state.writable && state.supported && !state.saving && !state.discovering
-  const dialect: Dialect = state.dialect === 'bash' ? 'bash' : 'pwsh'
+  const dialect: Dialect = state.dialect
   const bashPath = state.bashPath.trim()
+  const cmdPath = state.cmdPath.trim()
   const paths = knownPaths(state)
 
-  /** Commit the typed path, if it changed. */
+  /** Commit the typed bash path, if it changed. */
   const commitPath = (): void => {
     const next = draft.trim()
     if (next === bashPath) return
     controller.setBashPath(next)
   }
 
+  /** Commit the typed `cmd.exe` path, if it changed. Empty means auto-resolve. */
+  const commitCmdPath = (): void => {
+    const next = cmdDraft.trim()
+    if (next === cmdPath) return
+    controller.setCmdPath(next)
+  }
+
+  /**
+   * Commit the typed code page.
+   *
+   * Unparseable text is not persisted and the field snaps back to the stored
+   * value: writing `NaN` would reach `chcp` and break every command in the
+   * session, which is far worse than the field refusing a typo.
+   */
+  const commitCodePage = (): void => {
+    const parsed = parseCodePage(codePageDraft)
+    if (parsed === undefined) {
+      setCodePageDraft(String(state.cmdCodePage))
+      return
+    }
+    if (parsed === state.cmdCodePage) return
+    controller.setCmdCodePage(parsed)
+  }
+
   const dialectItems: readonly MenuEntry[] = [
     { id: 'pwsh', label: t('row.dialect.pwsh') },
     { id: 'bash', label: t('row.dialect.bash') },
+    { id: 'cmd', label: t('row.dialect.cmd') },
   ]
   const pathItems: readonly MenuEntry[] = paths.map((path) => ({ id: path, label: path }))
   const confinedItems: readonly MenuEntry[] = [
     { id: 'unconfined', label: t('row.confined.unconfined') },
     { id: 'escalate', label: t('row.confined.escalate') },
     { id: 'fail', label: t('row.confined.fail') },
+  ]
+  // No `fail` member, unlike the bash policy: `cmd.exe` starts under a
+  // restricted Windows token, so "refuse to run" would be a setting that can
+  // never fire.
+  const cmdConfinedItems: readonly MenuEntry[] = [
+    { id: 'escalate', label: t('row.cmdConfinedPolicy.escalate') },
+    { id: 'unconfined', label: t('row.cmdConfinedPolicy.unconfined') },
   ]
   const minimalItems: readonly MenuEntry[] = [
     { id: 'leave', label: t('row.minimal.leave') },
@@ -184,12 +259,12 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
         <Selector
           className="tterm-dialect"
           label={t('row.dialect.label')}
-          value={t(dialect === 'bash' ? 'row.dialect.bash' : 'row.dialect.pwsh')}
+          value={t(`row.dialect.${dialect}`)}
           items={dialectItems}
           selectedId={dialect}
           disabled={!controlsEnabled}
           onSelect={(id) => {
-            const next: Dialect = id === 'bash' ? 'bash' : 'pwsh'
+            const next = normalizeDialect(id)
             if (next !== dialect) controller.setDialect(next)
           }}
         />
@@ -305,6 +380,96 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
               />
             </div>
           ) : null}
+        </>
+      ) : null}
+
+      {dialect === 'cmd' ? (
+        <>
+          <div className="tterm-row">
+            <div className="tterm-text">
+              <div className="tterm-field-label">{t('row.cmdPath.label')}</div>
+              <div className="tterm-description">{t('row.cmdPath.description')}</div>
+              {/* The dialect's limits, stated once, where the user first meets it. */}
+              <div className="tterm-hint" role="note">
+                {t('row.cmd.limits')}
+              </div>
+            </div>
+
+            <div className="tterm-path-control">
+              <Input
+                id={CMD_PATH_CONTROL_ID}
+                className="tterm-path-input"
+                type="text"
+                spellCheck={false}
+                autoComplete="off"
+                aria-label={t('row.cmdPath.label')}
+                placeholder={t('row.cmdPath.placeholder')}
+                value={cmdDraft}
+                disabled={!controlsEnabled}
+                onChange={(event) => setCmdDraft(event.target.value)}
+                onBlur={commitCmdPath}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    commitCmdPath()
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="tterm-row">
+            <div className="tterm-text">
+              <div className="tterm-field-label">{t('row.cmdCodePage.label')}</div>
+              <div className="tterm-description">{t('row.cmdCodePage.description')}</div>
+            </div>
+
+            <Input
+              id={CODE_PAGE_CONTROL_ID}
+              className="tterm-code-page-input"
+              type="text"
+              inputMode="numeric"
+              spellCheck={false}
+              autoComplete="off"
+              aria-label={t('row.cmdCodePage.label')}
+              placeholder="65001"
+              value={codePageDraft}
+              disabled={!controlsEnabled}
+              onChange={(event) => setCodePageDraft(event.target.value)}
+              onBlur={commitCodePage}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commitCodePage()
+                }
+              }}
+            />
+          </div>
+
+          <div className="tterm-row">
+            <div className="tterm-text">
+              <div className="tterm-field-label">{t('row.cmdConfinedPolicy.label')}</div>
+              <div className="tterm-description">{t('row.cmdConfinedPolicy.description')}</div>
+              {state.cmdConfinedPolicy === 'unconfined' ? (
+                <div className="tterm-hint" role="note">
+                  {t('row.cmdConfinedPolicy.unconfinedNotice')}
+                </div>
+              ) : null}
+            </div>
+
+            <Selector
+              className="tterm-dialect"
+              label={t('row.cmdConfinedPolicy.label')}
+              value={t(`row.cmdConfinedPolicy.${state.cmdConfinedPolicy}`)}
+              items={cmdConfinedItems}
+              selectedId={state.cmdConfinedPolicy}
+              disabled={!controlsEnabled}
+              onSelect={(id) => {
+                const next: CmdConfinedPolicy = id === 'unconfined' ? 'unconfined' : 'escalate'
+                if (next !== state.cmdConfinedPolicy) controller.setCmdConfinedPolicy(next)
+              }}
+            />
+          </div>
         </>
       ) : null}
     </div>

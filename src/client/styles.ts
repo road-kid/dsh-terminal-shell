@@ -38,6 +38,7 @@ const CSS = `
 .tterm-path-input{flex:1;min-width:0}
 .tterm-path-selector{display:flex;flex:1;min-width:0}
 .tterm-path-selector .tterm-selector{width:100%}
+.tterm-code-page-input{flex:none;width:120px}
 `.trim()
 
 /**

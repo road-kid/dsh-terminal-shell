@@ -1,4 +1,5 @@
 import { fetchCandidates, fetchState } from './api.ts'
+import type { CmdConfinedPolicy } from '../cmd/types.ts'
 import type { ConfinedPolicy } from '../confined.ts'
 import type { MinimalMode, VariantStatus } from '../shared/protocol.ts'
 import type { ConfigFormLike, FieldOp, FormSnapshot, TerminalToolValues, Translate } from './types.ts'
@@ -47,6 +48,12 @@ export interface RowState {
   readonly bashPath: string
   readonly savedCandidates: readonly string[]
   readonly scanned: readonly string[]
+  /** Explicit `cmd.exe`, or `''` to let the Host resolve it. */
+  readonly cmdPath: string
+  /** Console code page the generated batch file switches to. */
+  readonly cmdCodePage: number
+  /** Sandbox policy for a cmd launch; only consulted under `dialect === 'cmd'`. */
+  readonly cmdConfinedPolicy: CmdConfinedPolicy
   readonly writable: boolean
   readonly settingsAvailable: boolean
   readonly supported: boolean
@@ -73,8 +80,14 @@ export interface RowController {
   setConfinedPolicy(policy: ConfinedPolicy): void
   setMinimalMode(mode: MinimalMode): void
   setBashPath(path: string): void
+  setCmdPath(path: string): void
+  setCmdCodePage(codePage: number): void
+  setCmdConfinedPolicy(policy: CmdConfinedPolicy): void
   discover(): void
 }
+
+/** Code page the batch file switches to unless the user says otherwise. */
+export const DEFAULT_CMD_CODE_PAGE = 65001
 
 /** Initial state: nothing known yet, and the default keeps sessions on pwsh. */
 export const INITIAL_ROW_STATE: RowState = {
@@ -87,6 +100,9 @@ export const INITIAL_ROW_STATE: RowState = {
   bashPath: '',
   savedCandidates: [],
   scanned: [],
+  cmdPath: '',
+  cmdCodePage: DEFAULT_CMD_CODE_PAGE,
+  cmdConfinedPolicy: 'escalate',
   writable: false,
   settingsAvailable: false,
   supported: false,
@@ -167,6 +183,34 @@ export function normalizeConfinedPolicy(value: unknown): ConfinedPolicy {
   return value === 'escalate' || value === 'fail' ? value : 'unconfined'
 }
 
+/**
+ * Narrow a wire value to the three legal dialects, defaulting to `pwsh`.
+ *
+ * `pwsh` is the safe fallback for the same reason it is the schema default:
+ * an unreadable profile value must leave the platform's own terminal tool in
+ * place rather than silently switching the session to a different shell.
+ */
+export function normalizeDialect(value: unknown): Dialect {
+  return value === 'bash' || value === 'cmd' ? value : 'pwsh'
+}
+
+/**
+ * Narrow a wire value to the two legal cmd policies, defaulting to `escalate`.
+ *
+ * The fallback mirrors `readCmdConfinedPolicy` in `src/config.ts`, which goes
+ * the *other* way from `normalizeConfinedPolicy`: dropping the sandbox is the
+ * riskier mistake, so an unknown value stays confined.
+ */
+export function normalizeCmdConfinedPolicy(value: unknown): CmdConfinedPolicy {
+  return value === 'unconfined' ? 'unconfined' : 'escalate'
+}
+
+/** Read a code page, falling back to UTF-8 for anything that is not a positive integer. */
+export function normalizeCodePage(value: unknown): number {
+  const parsed = Math.trunc(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_CMD_CODE_PAGE
+}
+
 /** Narrow a wire value to the three legal minimal modes, defaulting to `oneshot`. */
 export function normalizeMinimalMode(value: unknown): MinimalMode {
   return value === 'leave' || value === 'variant' ? value : 'oneshot'
@@ -200,11 +244,14 @@ export function createRowController(
       ...(value === undefined
         ? {}
         : {
-            dialect: value.dialect === 'bash' ? ('bash' as const) : ('pwsh' as const),
+            dialect: normalizeDialect(value.dialect),
             confinedPolicy: normalizeConfinedPolicy(value.confinedPolicy),
             minimalMode: normalizeMinimalMode(value.minimalMode),
             bashPath: value.bashPath ?? '',
             savedCandidates: value.bashCandidates ?? [],
+            cmdPath: value.cmdPath ?? '',
+            cmdCodePage: normalizeCodePage(value.cmdCodePage),
+            cmdConfinedPolicy: normalizeCmdConfinedPolicy(value.cmdConfinedPolicy),
           }),
     })
   }
@@ -257,6 +304,41 @@ export function createRowController(
     write([{ op: 'set', path: ['bashPath'], value: trimmed }])
   }
 
+  /**
+   * Persist the explicit `cmd.exe`, or `''` for auto-resolution.
+   *
+   * Deliberately not validated here: resolution is the Host's job (config →
+   * `ComSpec` → `%SystemRoot%\System32\cmd.exe`), and a path that does not exist
+   * yet is a legitimate intermediate state while the user is typing. A bad path
+   * surfaces as `cmd-not-found` on the next session instead.
+   */
+  const setCmdPath = (path: string): void => {
+    const trimmed = path.trim()
+    store.setState({ cmdPath: trimmed, error: undefined, notice: undefined })
+    write([{ op: 'set', path: ['cmdPath'], value: trimmed }])
+  }
+
+  /**
+   * Persist the console code page.
+   *
+   * Normalized on the way in so the form never receives `NaN`, `0` or a
+   * fractional value: `chcp` would fail on those and the generated script has no
+   * way to recover.
+   */
+  const setCmdCodePage = (codePage: number): void => {
+    const next = normalizeCodePage(codePage)
+    store.setState({ cmdCodePage: next, error: undefined, notice: undefined })
+    write([{ op: 'set', path: ['cmdCodePage'], value: next }])
+  }
+
+  const setCmdConfinedPolicy = (policy: CmdConfinedPolicy): void => {
+    // Optimistic like the other dropdowns; `cmdConfinedPolicy` is a separate
+    // field from `confinedPolicy` so switching dialect back and forth never
+    // overwrites the bash choice.
+    store.setState({ cmdConfinedPolicy: policy, error: undefined, notice: undefined })
+    write([{ op: 'set', path: ['cmdConfinedPolicy'], value: policy }])
+  }
+
   const discover = (): void => {
     const current = store.getState().bashPath
     store.setState({ discovering: true, error: undefined, notice: undefined })
@@ -307,11 +389,15 @@ export function createRowController(
           ...(state.capability.reason === undefined ? {} : { unsupportedReason: state.capability.reason }),
           // The form's value wins whenever it has arrived; `/state` is the
           // fallback for the brief window before the describe mirror loads.
+          // `/state` carries only the cmd path (code page and policy have no
+          // wire field), so the other two keep their defaults until the form
+          // delivers them — which is the same value the schema defaults to.
           ...(settingsReady
             ? {}
             : {
-                dialect: state.dialect,
-                bashPath: state.bashPath,
+                dialect: normalizeDialect(state.dialect),
+                bashPath: state.bashPath ?? '',
+                cmdPath: state.cmdPath ?? '',
                 minimalMode: normalizeMinimalMode(state.minimalMode),
               }),
           // The variant lifecycle is Host-owned: never cached across a mount.
@@ -339,5 +425,16 @@ export function createRowController(
     }
   }
 
-  return { store, start, setDialect, setConfinedPolicy, setMinimalMode, setBashPath, discover }
+  return {
+    store,
+    start,
+    setDialect,
+    setConfinedPolicy,
+    setMinimalMode,
+    setBashPath,
+    setCmdPath,
+    setCmdCodePage,
+    setCmdConfinedPolicy,
+    discover,
+  }
 }

@@ -1,8 +1,8 @@
 {
   "name": "dsh-terminal-shell",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Switch the Windows terminal tool from pwsh to the local Git Bash, without touching presets or the global ctx.shell.",
+  "description": "Choose which shell backs the Windows terminal tool: PowerShell, the local Git Bash, or cmd.exe. No preset edits, no global ctx.shell takeover.",
   "license": "MIT",
   "author": {
     "name": "liang",
@@ -22,6 +22,10 @@
     "dsh-plugin",
     "bash",
     "git-bash",
+    "cmd",
+    "cmd-exe",
+    "powershell",
+    "shell",
     "terminal",
     "windows"
   ],
@@ -79,12 +83,14 @@
     "selftest": "node scripts/selftest.mjs",
     "contractcheck": "node scripts/contractcheck.mjs",
     "integration": "node scripts/integration.mjs",
-    "check": "npm run typecheck && npm run build && npm run contractcheck && npm run clientsmoke && npm run selftest && npm run rowselftest && npm run rendertest && npm run integration && npm run ptytests",
+    "check": "npm run typecheck && npm run build && npm run contractcheck && npm run clientsmoke && npm run selftest && npm run rowselftest && npm run rendertest && npm run cmdunit && npm run integration && npm run cmdtest && npm run ptytests",
     "prepack": "npm run build",
     "clientsmoke": "node scripts/clientsmoke.mjs",
     "rowselftest": "node scripts/rowselftest.mjs",
     "rendertest": "node scripts/rendertest.mjs",
-    "ptytests": "node scripts/ptytests.mjs"
+    "ptytests": "node scripts/ptytests.mjs",
+    "cmdunit": "node scripts/cmdunittest.mjs",
+    "cmdtest": "node scripts/cmdtest.mjs"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.18.4",
@@ -92,12 +98,15 @@
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-bash-local": ">=0.2.1-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-jobs": ">=0.2.1-rc.2 <0.3.0",
     "@deepseek-ai/dsh-sandbox": ">=0.2.1-rc.2 <0.3.0",
     "@deepseek-ai/dsh-shell": ">=0.2.1-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-shell-env": ">=0.2.1-rc.2 <0.3.0",
     "@deepseek-ai/dsh-system-prompt": ">=0.2.1-rc.2 <0.3.0",
     "@deepseek-ai/dsh-tool-bash": ">=0.2.1-rc.2 <0.3.0",
     "@deepseek-ai/dsh-tools": ">=0.2.1-rc.2 <0.3.0",
-    "@deepseek-ai/dsh-terminal-bash": ">=0.2.1-rc.2 <0.3.0"
+    "@deepseek-ai/dsh-terminal-bash": ">=0.2.1-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.1-rc.2 <0.3.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
@@ -111,6 +120,7 @@
     "@deepseek-ai/dsh-sandbox-policy": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session-projection": "^0.2.1-rc.2",
     "@deepseek-ai/dsh-shell": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-shell-env": "0.2.1-rc.2",
     "@deepseek-ai/dsh-subprocess-local": "^0.2.1-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
     "@deepseek-ai/dsh-terminal": "^0.2.1-rc.2",
@@ -138,6 +148,9 @@
     "esbuild@0.25.12": true
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-jobs": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-terminal-bash": {
       "optional": true
     }

@@ -1,8 +1,8 @@
-# 设计与实施单：CMD 终端方言（v3 · 开工版）
+# 设计与实施单：CMD 终端方言（v3 · 已实现）
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **评审已闭合，开工就绪**（评审报告 `docs/REVIEW-cmd-dialect.md` 的 B1–B10 与 P1-1–P1-8 全部处理完毕） |
+| 状态 | **已实现并交付于 `0.2.0`**。评审报告 `docs/REVIEW-cmd-dialect.md` 的 B1–B10 与 P1-1–P1-8 全部落地；落地后的设计事实见 `docs/DESIGN.md` §14 |
 | 目标版本 | `0.2.0`（直接正式版，不打 rc） |
 | 基线 | DSH `0.2.1-rc.2`；本插件 `dsh-terminal-shell@0.1.7`，HEAD `37ce291`，已发布 npm |
 | 关联 | M1 `confinedPolicy`（`docs/PLAN-confined-bash.md`）、M2 极简模式（`docs/PLAN-minimal-mode.md`）、架构总述 `docs/DESIGN.md` |

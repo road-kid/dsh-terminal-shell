@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "终端工具",
-    "description": "提供终端选择：模型执行命令时使用 PowerShell 或本机 Git Bash，改动只影响新会话。"
+    "description": "提供终端选择：模型执行命令时使用 PowerShell、本机 Git Bash 或命令提示符（cmd），改动只影响新会话。"
   }
 }
