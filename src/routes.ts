@@ -103,6 +103,7 @@ export function createHandlers(deps: RouteDeps): {
       settingsAvailable: deps.settingsAvailable(),
       dialect: snapshot.dialect,
       bashPath: snapshot.bashPath,
+      cmdPath: snapshot.cmdPath,
       bashCandidates: snapshot.bashCandidates,
       capability: deps.capability(),
       minimalMode: snapshot.minimalMode,

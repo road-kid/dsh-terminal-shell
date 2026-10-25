@@ -1,8 +1,9 @@
 import z from '@deepseek-ai/schemastery'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import type { Config as BashLocalConfig } from '@deepseek-ai/dsh-bash-local'
+import type { CmdConfinedPolicy } from './cmd/types.ts'
 import type { ConfinedPolicy } from './confined.ts'
-import type { MinimalMode } from './shared/protocol.ts'
+import type { Dialect, MinimalMode } from './shared/protocol.ts'
 
 /**
  * Plugin configuration.
@@ -27,9 +28,9 @@ export const Config = z.object({
   /**
    * Which terminal tool the session gets. `pwsh` is the default on purpose:
    * installing the plugin must not change behaviour until the user asks for
-   * bash (F9).
+   * bash or cmd (F9).
    */
-  dialect: z.union(['pwsh', 'bash'] as const).default('pwsh').volatile(),
+  dialect: z.union(['pwsh', 'bash', 'cmd'] as const).default('pwsh').volatile(),
 
   /** Explicit bash executable. Empty means "discover". */
   bashPath: z.string().default('').volatile(),
@@ -74,6 +75,43 @@ export const Config = z.object({
   confinedPolicy: z.union(['unconfined', 'escalate', 'fail'] as const).default('unconfined').volatile(),
 
   /**
+   * Explicit `cmd.exe`. Empty means "resolve it": `ComSpec`, then
+   * `%SystemRoot%\System32\cmd.exe` (see `src/cmd/discover.ts`).
+   *
+   * Kept separate from `bashPath` on purpose: the two dialects are independent
+   * and a user may switch back and forth without re-picking either.
+   */
+  cmdPath: z.string().default('').volatile(),
+
+  /**
+   * Console code page the generated batch file switches to before running the
+   * command.
+   *
+   * `65001` (UTF-8) is the only value that makes non-ASCII output survive the
+   * pipe, because the harness decodes child output as UTF-8 unconditionally.
+   * The knob exists as an escape hatch for a command that must see the legacy
+   * ANSI page (a tool that reads `chcp` and branches on it); changing it
+   * reintroduces mojibake for non-ASCII output.
+   */
+  cmdCodePage: z.number().default(65001).volatile(),
+
+  /**
+   * How to launch `cmd.exe` under a confined sandbox policy.
+   *
+   * Unlike `confinedPolicy` there is no `fail` member: Git Bash cannot start
+   * under a restricted Windows token (hence `confinedPolicy`), while `cmd.exe`
+   * is what the official windows-acl backend itself probes with, so a confined
+   * cmd launch is always possible.
+   *
+   * - `escalate` (default): honour the standing policy; a denial is reported as
+   *   a sandbox denial, which is what lets the model ask for
+   *   `sandbox_permissions: danger-full-access` through the official flow.
+   * - `unconfined`: launch outside the sandbox, exactly like
+   *   `confinedPolicy: 'unconfined'` does for Git Bash.
+   */
+  cmdConfinedPolicy: z.union(['escalate', 'unconfined'] as const).default('escalate').volatile(),
+
+  /**
    * How the official `minimal` preset is treated.
    *
    * `minimal` is the only shipped preset that runs a *persistent* shell, and on
@@ -94,7 +132,7 @@ export const Config = z.object({
 
 /** Validated config as cordis hands it to `apply`. */
 export type RawConfig = BashLocalConfig & {
-  readonly dialect: 'pwsh' | 'bash'
+  readonly dialect: Dialect
   readonly bashPath: string
   readonly bashCandidates: readonly string[]
   readonly autoDiscover: boolean
@@ -103,6 +141,9 @@ export type RawConfig = BashLocalConfig & {
   readonly extraPath: readonly string[]
   readonly pythonUtf8: boolean
   readonly confinedPolicy: ConfinedPolicy
+  readonly cmdPath: string
+  readonly cmdCodePage: number
+  readonly cmdConfinedPolicy: CmdConfinedPolicy
   readonly minimalMode: MinimalMode
 }
 
@@ -115,7 +156,7 @@ export type RawConfig = BashLocalConfig & {
  * ever writing back to the profile.
  */
 export interface ConfigSnapshot {
-  readonly dialect: 'pwsh' | 'bash'
+  readonly dialect: Dialect
   readonly bashPath: string
   readonly bashCandidates: readonly string[]
   readonly autoDiscover: boolean
@@ -124,6 +165,9 @@ export interface ConfigSnapshot {
   readonly extraPath: readonly string[]
   readonly pythonUtf8: boolean
   readonly confinedPolicy: ConfinedPolicy
+  readonly cmdPath: string
+  readonly cmdCodePage: number
+  readonly cmdConfinedPolicy: CmdConfinedPolicy
   readonly minimalMode: MinimalMode
   readonly cwd: string | undefined
   readonly timeoutMs: number
@@ -179,6 +223,26 @@ function readConfinedPolicy(value: unknown): ConfinedPolicy {
 }
 
 /**
+ * Read the cmd confined-launch policy.
+ *
+ * Anything outside the union falls back to `escalate`, the schema default: a
+ * malformed profile value must not silently drop the sandbox for cmd commands.
+ * (`confinedPolicy` deliberately falls back the *other* way, because its
+ * `escalate` branch means "Git Bash cannot run at all".)
+ */
+function readCmdConfinedPolicy(value: unknown): CmdConfinedPolicy {
+  const resolved = read<string>(value, 'escalate')
+  return resolved === 'unconfined' ? 'unconfined' : 'escalate'
+}
+
+/** Read the dialect, mapping anything unknown to `pwsh` (the safe no-op). */
+function readDialect(value: unknown): Dialect {
+  const resolved = read<string>(value, 'pwsh')
+  if (resolved === 'bash' || resolved === 'cmd') return resolved
+  return 'pwsh'
+}
+
+/**
  * Defaults mirrored from the schemastery schema; used only for unvalidated input.
  */
 const DEFAULTS = {
@@ -204,9 +268,8 @@ export function snapshotConfig(config: RawConfig): ConfigSnapshot {
   // they are plain values. Reading through an index signature is the single place
   // that dual nature is asserted; `read` re-establishes the real type per field.
   const source = config as unknown as Readonly<Record<string, unknown>>
-  const dialect = read<string>(source.dialect, 'pwsh')
   return Object.freeze({
-    dialect: dialect === 'bash' ? 'bash' : 'pwsh',
+    dialect: readDialect(source.dialect),
     bashPath: read<string>(source.bashPath, '').trim(),
     bashCandidates: readArray(source.bashCandidates),
     autoDiscover: read<boolean>(source.autoDiscover, true) !== false,
@@ -215,6 +278,9 @@ export function snapshotConfig(config: RawConfig): ConfigSnapshot {
     extraPath: readArray(source.extraPath),
     pythonUtf8: read<boolean>(source.pythonUtf8, true) !== false,
     confinedPolicy: readConfinedPolicy(source.confinedPolicy),
+    cmdPath: read<string>(source.cmdPath, '').trim(),
+    cmdCodePage: Math.max(0, Math.trunc(Number(read<number>(source.cmdCodePage, 65001)) || 65001)),
+    cmdConfinedPolicy: readCmdConfinedPolicy(source.cmdConfinedPolicy),
     minimalMode: readMinimalMode(source.minimalMode),
     cwd: read<string>(source.cwd, '') || undefined,
     timeoutMs: read<number>(source.timeoutMs, DEFAULTS.timeoutMs),
@@ -259,4 +325,9 @@ export function executorConfig(snapshot: ConfigSnapshot): ExecutorArgs {
 /** Whether the config selects bash at all. */
 export function wantsBash(snapshot: ConfigSnapshot): boolean {
   return snapshot.dialect === 'bash'
+}
+
+/** Whether the config selects the cmd dialect. */
+export function wantsCmd(snapshot: ConfigSnapshot): boolean {
+  return snapshot.dialect === 'cmd'
 }

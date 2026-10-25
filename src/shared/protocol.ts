@@ -30,8 +30,14 @@ export const ROUTE_STATE = '/api/dsh-terminal-shell/state'
 /** Discovery endpoint path. */
 export const ROUTE_DISCOVER = '/api/dsh-terminal-shell/discover'
 
-/** Which terminal tool a session gets. */
-export type Dialect = 'pwsh' | 'bash'
+/**
+ * Which terminal tool a session gets.
+ *
+ * - `pwsh`: leave the platform alone (the official PowerShell tool).
+ * - `bash`: replace it with Git Bash.
+ * - `cmd`: replace it with `cmd.exe` through a one-shot batch file.
+ */
+export type Dialect = 'pwsh' | 'bash' | 'cmd'
 
 /**
  * What happens to the official `minimal` preset (on Windows it runs a
@@ -122,6 +128,8 @@ export interface StateView {
   /** Current dialect as the Host reads it (fallback before the form is ready). */
   readonly dialect: Dialect
   readonly bashPath: string
+  /** Configured `cmd.exe` override, or `''` to auto-resolve (see `discover.ts`). */
+  readonly cmdPath: string
   /** Persisted candidate list from the last 自动发现 sweep. */
   readonly bashCandidates: readonly string[]
   readonly capability: CapabilityView

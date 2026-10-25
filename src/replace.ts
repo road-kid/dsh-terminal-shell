@@ -41,9 +41,16 @@ const TAG = 'terminal-shell'
 /** Fallback order for the `tool:pwsh` prompt section when the table lookup fails. */
 const TOOL_PWSH_ORDER = 1010
 
-/** What a session-level attempt produced, for tests and diagnostics. */
+/**
+ * What a session-level attempt produced, for tests and diagnostics.
+ *
+ * `bashPath` is deliberately **not** renamed to a neutral `executable`: it is
+ * written into generated preset rows (`src/preset.ts:110`) and used as the PTY
+ * backend's config key, so renaming it would drag a client-visible schema change
+ * into this release. The cmd path is therefore an *additional* optional field.
+ */
 export type InstallResult =
-  | { readonly status: 'installed'; readonly bashPath: string }
+  | { readonly status: 'installed'; readonly bashPath: string; readonly cmdPath?: string }
   | { readonly status: 'skipped'; readonly reason: SkipReason; readonly detail?: string }
 
 /**

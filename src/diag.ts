@@ -51,6 +51,14 @@ export type SkipReason =
   | 'missing-service'
   | 'minimal-left'
   | 'mount-failed'
+  /** `dialect: 'cmd'` requested, but the session keeps a preset that owns the terminal. */
+  | 'dialect-cmd'
+  /** No `cmd.exe` could be resolved from config, `ComSpec` or `%SystemRoot%`. */
+  | 'cmd-not-found'
+  /** The one-shot batch file could not be written into the scratch directory. */
+  | 'cmd-script-failed'
+  /** Mounting the cmd executor or the `cmd` tool failed. */
+  | 'cmd-mount-failed'
 
 /**
  * Record why a session keeps the stock terminal tool, and return the reason so

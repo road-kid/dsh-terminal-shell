@@ -20,8 +20,8 @@ import type { ConfigFormLike, FieldOp, FormSnapshot, TerminalToolValues, Transla
  * instant even on a machine with many candidate roots.
  */
 
-/** Which terminal tool a session gets. */
-export type Dialect = 'pwsh' | 'bash'
+/** Which terminal tool a session gets. Mirrors `Dialect` in the wire protocol. */
+export type Dialect = 'pwsh' | 'bash' | 'cmd'
 
 export type { MinimalMode, VariantStatus }
 
