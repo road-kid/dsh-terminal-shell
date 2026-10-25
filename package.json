@@ -60,6 +60,7 @@
     "assets",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "lib/pty.js",
     "lib/pty.js.map"
