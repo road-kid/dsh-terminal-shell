@@ -289,7 +289,7 @@ await test('apply() wires agent/created and records the outcome', async () => {
   const host = await createHost()
   // Mount the real plugin entry the way the loader does: config in, no services
   // injected, everything probed.
-  const fiber = host.ctx.plugin({ name: 'terminal-tool', inject: [], apply }, { dialect: 'bash' })
+  const fiber = host.ctx.plugin({ name: 'terminal-shell', inject: [], apply }, { dialect: 'bash' })
   await fiber
 
   const { agent, scope, preset } = createAgent(host, 'session-e')

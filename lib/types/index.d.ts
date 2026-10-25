@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Config as BashLocalConfig } from '@deepseek-ai/dsh-bash-local'
 import z from '@deepseek-ai/schemastery'
 
-export declare const name = 'terminal-tool'
+export declare const name = 'terminal-shell'
 export declare const inject: string[]
 export type RawConfig = BashLocalConfig & {
   readonly dialect: 'pwsh' | 'bash'

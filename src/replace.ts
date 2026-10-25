@@ -36,7 +36,7 @@ import { MINIMAL_ID, VARIANT_ID } from './preset.ts'
  */
 
 /** Marker in the diagnostic log and the isolate label. */
-const TAG = 'terminal-tool'
+const TAG = 'terminal-shell'
 
 /** Fallback order for the `tool:pwsh` prompt section when the table lookup fails. */
 const TOOL_PWSH_ORDER = 1010

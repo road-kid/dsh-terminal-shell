@@ -12,7 +12,7 @@ import { writeDiagnostic } from './diag.ts'
 import type { CapabilityView, Dialect, ReplaceReport } from './shared/protocol.ts'
 
 /**
- * dsh-terminal-tool.
+ * dsh-terminal-shell.
  *
  * Choose `pwsh` or Git Bash per profile, and when bash is selected every new
  * session gets a `bash` tool backed by the real Git Bash, with `pwsh` gone.
@@ -29,7 +29,7 @@ import type { CapabilityView, Dialect, ReplaceReport } from './shared/protocol.t
  * and appends a line to the diagnostic log.
  */
 
-export const name = 'terminal-tool'
+export const name = 'terminal-shell'
 
 /** Resolved lazily through `ctx.get`, so nothing here is a hard dependency. */
 export const inject: string[] = []
@@ -114,7 +114,7 @@ export function apply(ctx: Context, config: RawConfig): void {
   ctx.inject(['agentPresets'], () => {
     syncVariant(snapshotConfig(config))
   })
-  ctx.effect(() => () => variant.release(), 'terminal-tool: variant')
+  ctx.effect(() => () => variant.release(), 'terminal-shell: variant')
 
   // Volatile-only edits do not reload this fiber: the loader commits the new
   // values and emits this event, so this is where a mode change takes effect

@@ -14,10 +14,10 @@
  */
 
 /** Client module id; the loader removes sheets owned by `data-plugin=<id>`. */
-const PLUGIN_ID = 'dsh-terminal-tool'
+const PLUGIN_ID = 'dsh-terminal-shell'
 
 /** Marker attribute used to find (and reuse) the injected sheet after HMR. */
-export const STYLE_TAG_ID = 'dsh-terminal-tool/row.css'
+export const STYLE_TAG_ID = 'dsh-terminal-shell/row.css'
 
 const CSS = `
 .tterm-group{display:flex;flex-direction:column;gap:12px;padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}

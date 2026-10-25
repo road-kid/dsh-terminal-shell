@@ -17,7 +17,7 @@
    同时在 Host 侧注册一个预设变体 `minimal-gitbash`（= 官方 `minimal` 的完整克隆，只把
    持久 PowerShell 两行换成持久 Git Bash）。变体**仅在选中该项时注册**，取消选择即进入注销流程；
    注销受第 4 条约束。
-3. 持久 Git Bash 由新的子入口 **`dsh-terminal-tool/pty`** 提供：复用官方
+3. 持久 Git Bash 由新的子入口 **`dsh-terminal-shell/pty`** 提供：复用官方
    `@deepseek-ai/dsh-terminal-bash` 的 `BashTerminalBackend`，通过它的第三个构造参数注入
    `spawnTerminal`，把「受限档位下被沙箱包装的 argv」换回 `[git-bash, …args]`——
    官方 fence / PTY 会话 / 启动握手 / 提示符逻辑全部保留，只替换「是否受文件沙箱」这一层。
@@ -174,7 +174,7 @@ js-yaml 4.3.2 的 ESM 入口提供 `JSON_SCHEMA` / `Type` / `load` / `dump` 具�
 
    ```yaml
    - id: gitbash-pty
-     name: dsh-terminal-tool/pty
+     name: dsh-terminal-shell/pty
      config:
        backendType: gitbash
        bashPath: C:/Program Files/Git/bin/bash.exe
@@ -226,7 +226,7 @@ export function mountVariant(ctx: Context, spec: VariantSpec): void {
     child.effect(() => async () => {
       const unregister = await pending            // activate 从不 reject，只有 broken
       await unregister()                          // 幂等
-    }, 'terminal-tool.variant')
+    }, 'terminal-shell.variant')
   })
 }
 ```
@@ -291,7 +291,7 @@ scope，所以**注销不会打断正在使用该变体的活动会话**（它�
 
 ---
 
-## 5. 持久 Git Bash 后端：`dsh-terminal-tool/pty`
+## 5. 持久 Git Bash 后端：`dsh-terminal-shell/pty`
 
 ### 5.1 为什么是「注入 spawnTerminal」而不是子类重写
 
@@ -499,7 +499,7 @@ graceMs, signal}`（官方 `spawn()` 里逐字段现造，不转发 `owner`/`ses
    但 `list()`/`resolve()`/`retain()`/`select()` 会 `await loader.await()`，**必须等 activation
    返回后**再调（否则整个插件行不 ready）。M2 要在真机确认「首帧设置行能显示变体状态」。
 4. **受限档位**：持久 Git Bash 在 `workspace-write` 下仍不可用（物理约束，M1 已证）。
-5. **变体行预检**：`dsh-terminal-tool/pty` 作为预设行会走 `prepareProfileEntries` 兼容预检，
+5. **变体行预检**：`dsh-terminal-shell/pty` 作为预设行会走 `prepareProfileEntries` 兼容预检，
    用我们的 `engines.dsh` 判定；若未来 `engines.dsh` 写错会被静默 `disabled`（仅 stderr 一行）。
    测试里要断言变体 `list()` 不返回 `broken`。
 
@@ -518,7 +518,7 @@ graceMs, signal}`（官方 `spawn()` 里逐字段现造，不转发 `owner`/`ses
 
 1. 配置字段 `minimalMode` + 三种语义（`leave` / `oneshot` / `variant`）。
 2. 变体生成（官方 minimal 克隆 + 变异）与生命周期（懒注册、引用安全注销、启动修复）。
-3. 持久 Git Bash 后端 `dsh-terminal-tool/pty`（注入 `spawnTerminal` + `planLaunch` 决策）。
+3. 持久 Git Bash 后端 `dsh-terminal-shell/pty`（注入 `spawnTerminal` + `planLaunch` 决策）。
 4. 设置行第 4 行 + locale + `/state` 字段。
 5. 测试与文档（README/DESIGN/本草图）。
 6. 验收：`npm run check` 全绿；真机三选项各跑一次；profile 重装；重启桌面端肉眼验收。
@@ -531,7 +531,7 @@ M3 不是新功能，**实际意义**是把 M2 里三条「尽力而为」变成
    把误注销风险降到零；并给设置行加「清理变体」显式按钮（有引用时二次确认 + 明示后果）。
 2. **名册刷新**：研究在注册/注销后让官方预设选择器立即刷新（事件通道或重挂载钩子），
    消除「重开界面才可见」。
-3. **持久 Git Bash 通用化**：评估把 `dsh-terminal-tool/pty` 作为独立行接入实验 bundle 的
+3. **持久 Git Bash 通用化**：评估把 `dsh-terminal-shell/pty` 作为独立行接入实验 bundle 的
    `optional-persistent-terminals` 组（`terminal_open {type:'gitbash'}`），让持久 Git Bash
    不再只存在于 minimal 变体里——这是「持久化 + 通用」的真正落点。
 4. **真机矩阵**：`unconfined` / `escalate` / `fail` × 三种会话（standard / minimal /
@@ -564,12 +564,12 @@ M3 不是新功能，**实际意义**是把 M2 里三条「尽力而为」变成
 | D3 | `minimalMode` 默认 `oneshot`（升级不改变既有行为） |
 | D4 | 无引用立即注销；仍有引用时 `retained`，不销毁定义 |
 | D5 | `js-yaml` 进 `dependencies` 并保持 external（不内联进 bundle） |
-| D6 | 未接管实验 bundle；`dsh-terminal-tool/pty` 只在变体预设组内注册，M3 再评估接入 |
+| D6 | 未接管实验 bundle；`dsh-terminal-shell/pty` 只在变体预设组内注册，M3 再评估接入 |
 
 代码落点：
 
 - `src/preset.ts`（新）：行克隆（`parsePresetRows` / `cloneMinimalForGitBash` / `formatPresetRows`）、`createVariantManager()`（`sync`/`verify`/`release`）、`specSignature()`、引用计数。
-- `src/pty.ts`（新）：`dsh-terminal-tool/pty` 入口，复用 `BashTerminalBackend` 并注入 `spawnTerminal`，按 `planLaunch` 决定 direct / confine / fail。
+- `src/pty.ts`（新）：`dsh-terminal-shell/pty` 入口，复用 `BashTerminalBackend` 并注入 `spawnTerminal`，按 `planLaunch` 决定 direct / confine / fail。
 - `src/config.ts` / `src/diag.ts` / `src/shared/protocol.ts` / `src/routes.ts`：`minimalMode` 字段、`minimal-left` 跳过原因、`/state` 的 `minimalMode` 与 `variant`。
 - `src/replace.ts`：`presetOf()` 读会话预设，`minimal` + 非 `oneshot` 直接 `minimal-left`；变体会话按 `already-replaced` 跳过。
 - `src/index.ts`：`ctx.inject(['agentPresets'], …)` 里首次同步、`loader/volatile-update` 重同步、`ctx.effect` 释放、`/state` 的 `variant` 懒刷新。
@@ -594,12 +594,12 @@ profile 已重装至 `0.5.1`；GUI 三选项人工验收待办（见 §14）。
 - 代码：`src/preset.ts`、`src/pty.ts`、`minimalMode` 配置/协议/客户端第 4 行、`scripts/ptytests.mjs`。
 - 测试：`npm run check` 全绿（18 / 8 / 51 / 15 / 14 / 13 / 4）。
 - 文档：README「极简模式（minimal preset）」、DESIGN §13、本文档 §13。
-- profile：`pnpm update dsh-terminal-tool` → `0.5.1`，`exports['./pty']` 与 `lib/pty.js` 就位；`cordis.patch.yml` 未写 `minimalMode` 键，生效值走默认 `oneshot`。
+- profile：`pnpm update dsh-terminal-shell` → `0.5.1`，`exports['./pty']` 与 `lib/pty.js` 就位；`cordis.patch.yml` 未写 `minimalMode` 键，生效值走默认 `oneshot`。
 
 待办（下一轮开始时首先做）：
 
 0. **已完成的无头验收**（dev harness `--profile web`，插件 0.5.1）：
-   `/api/dsh-terminal-tool/state` 在三种模式下分别返回
+   `/api/dsh-terminal-shell/state` 在三种模式下分别返回
    `minimalMode: oneshot / variant / leave`；`variant` 模式下 `variant.status === "registered"`，
    `leave` 模式下诊断日志出现 `variant: unregistered minimal-gitbash`，且无 `variant: mount failed`。
    说明预设定义能被注册表挂载（行解析 + isolate 审计通过）。浏览器自动化在本次会话中不稳定，

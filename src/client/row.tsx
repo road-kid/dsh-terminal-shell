@@ -49,7 +49,7 @@ import type { RowProps } from './types.ts'
  */
 
 /** Id of the path control, used by the visible label. */
-const PATH_CONTROL_ID = 'dsh-terminal-tool-path'
+const PATH_CONTROL_ID = 'dsh-terminal-shell-path'
 
 /** Follow one store field. */
 function useStoreState(controller: RowController): RowState {
@@ -160,7 +160,7 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
   ]
 
   return (
-    <div className="tterm-group" data-dsh-terminal-tool="row">
+    <div className="tterm-group" data-dsh-terminal-shell="row">
       <div className="tterm-row">
         <div className="tterm-text">
           <div className="tterm-title">{t('row.title')}</div>

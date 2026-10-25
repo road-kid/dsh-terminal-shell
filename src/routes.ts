@@ -172,7 +172,7 @@ export function registerRoutes(ctx: Context, deps: RouteDeps): void {
       const spec = path === ROUTE_STATE ? route(path, () => handlers.state()) : route(path, (body) => handlers.discover(body))
       const dispose = connection.fetch.register(spec)
       // Routes live exactly as long as the connection service does.
-      scoped.effect(() => dispose, `terminal-tool: fetch route ${path}`)
+      scoped.effect(() => dispose, `terminal-shell: fetch route ${path}`)
     }
     writeDiagnostic('routes: registered /state and /discover')
   }

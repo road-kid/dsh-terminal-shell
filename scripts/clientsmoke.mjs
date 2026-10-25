@@ -71,7 +71,7 @@ function loadBundle() {
 
 await test('bundle registers itself under the package name', () => {
   const { id } = loadBundle()
-  assert.equal(id, 'dsh-terminal-tool')
+  assert.equal(id, 'dsh-terminal-shell')
 })
 
 await test('bundle keeps react and the official UI atoms external', () => {
@@ -83,7 +83,7 @@ await test('exports the entry shape the loader calls', () => {
   const { exports } = loadBundle()
   assert.equal(typeof exports.apply, 'function')
   assert.deepEqual(exports.inject, ['slots', 'locale'])
-  assert.equal(exports.GENERAL_ITEM_ID, 'terminal-tool')
+  assert.equal(exports.GENERAL_ITEM_ID, 'terminal-shell')
   assert.equal(exports.GENERAL_ITEM_ORDER, 60)
 })
 
@@ -143,16 +143,16 @@ function stubContext({ withForms = true } = {}) {
 await test('apply registers the row into settings.general.item', () => {
   const { ctx, calls } = stubContext()
   loadBundle().exports.apply(ctx)
-  assert.deepEqual(calls.locale.map((entry) => entry.namespace), ['terminal-tool'])
+  assert.deepEqual(calls.locale.map((entry) => entry.namespace), ['terminal-shell'])
   assert.ok(calls.locale[0].dictionaries.zh['row.title'] !== undefined, 'zh dictionary ships')
   assert.ok(calls.locale[0].dictionaries.en['row.title'] !== undefined, 'en dictionary ships')
   assert.deepEqual(calls.injected, ['settings.general.item'])
   assert.equal(calls.registered.length, 1)
   const { registration, component } = calls.registered[0]
   assert.equal(registration.name, 'settings.general.item')
-  assert.equal(registration.id, 'terminal-tool')
+  assert.equal(registration.id, 'terminal-shell')
   assert.equal(registration.order, 60)
-  assert.equal(registration.locale, 'terminal-tool')
+  assert.equal(registration.locale, 'terminal-shell')
   assert.equal(typeof component, 'function', 'the slot gets the row component')
 })
 
@@ -161,7 +161,7 @@ await test('the slot face carries a bound translate and the form', () => {
   loadBundle().exports.apply(ctx)
   const face = calls.registered[0].registration.inject()
   assert.equal(face.form, form)
-  assert.equal(face.t('row.title'), 'terminal-tool:row.title')
+  assert.equal(face.t('row.title'), 'terminal-shell:row.title')
 })
 
 await test('a Host without configForms still seats a read-only row', () => {

@@ -3,10 +3,10 @@
  *
  * Only the two exact Fetch routes under `/api` are used:
  *
- * - `POST /api/dsh-terminal-tool/state`    — platform, settings availability,
+ * - `POST /api/dsh-terminal-shell/state`    — platform, settings availability,
  *   current values, capability probe. **Never scans**: the settings row reads
  *   this on every mount and a sweep spawns `reg.exe`.
- * - `POST /api/dsh-terminal-tool/discover` — rescan candidates (pure query, no
+ * - `POST /api/dsh-terminal-shell/discover` — rescan candidates (pure query, no
  *   side effects). Only called when the user clicks 自动发现.
  *
  * Persistence does **not** go through these routes: the browser half edits the
@@ -22,13 +22,13 @@
  * the Host serves that namespace. This value must therefore match the `id` in
  * `cordis.patch.yml` verbatim.
  */
-export const SETTINGS_NAMESPACE = 'terminal-tool'
+export const SETTINGS_NAMESPACE = 'terminal-shell'
 
 /** State endpoint path. */
-export const ROUTE_STATE = '/api/dsh-terminal-tool/state'
+export const ROUTE_STATE = '/api/dsh-terminal-shell/state'
 
 /** Discovery endpoint path. */
-export const ROUTE_DISCOVER = '/api/dsh-terminal-tool/discover'
+export const ROUTE_DISCOVER = '/api/dsh-terminal-shell/discover'
 
 /** Which terminal tool a session gets. */
 export type Dialect = 'pwsh' | 'bash'

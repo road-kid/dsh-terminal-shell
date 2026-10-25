@@ -3,7 +3,7 @@ import type { Dictionary } from './types.ts'
 /**
  * Row copy.
  *
- * The namespace is the profile entry id (`terminal-tool`) so `label:()=>t('row.title')`
+ * The namespace is the profile entry id (`terminal-shell`) so `label:()=>t('row.title')`
  * and the row body resolve through the same dictionary the slot declares.
  *
  * Wording follows the official General-section rows: a short noun-phrase title,
@@ -11,7 +11,7 @@ import type { Dictionary } from './types.ts'
  * plugin cannot keep. The description says *what the setting changes* and *when*
  * it takes effect, because that is the only thing a user needs to decide.
  */
-export const LOCALE_NAMESPACE = 'terminal-tool'
+export const LOCALE_NAMESPACE = 'terminal-shell'
 
 export const zh: Dictionary = {
   'row.title': '终端工具',

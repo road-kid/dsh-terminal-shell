@@ -1,4 +1,4 @@
-# dsh-terminal-tool
+# dsh-terminal-shell
 
 在 Windows 上把模型的终端工具从 **pwsh** 换成 **本机 Git Bash** 的 DSH 插件。
 
@@ -83,8 +83,8 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的：
 
 ```powershell
 # 1. 构建（产物在 lib/）
-git clone https://github.com/road-kid/dsh-terminal-tool.git
-cd dsh-terminal-tool
+git clone https://github.com/road-kid/dsh-terminal-shell.git
+cd dsh-terminal-shell
 npm install
 npm run check        # typecheck → build → contractcheck → clientsmoke → selftest → rowselftest → rendertest → integration → ptytests
 
@@ -100,8 +100,8 @@ npm pack
 
 ```yaml
 - insert:
-    - id: terminal-tool
-      name: dsh-terminal-tool
+    - id: terminal-shell
+      name: dsh-terminal-shell
       disabled: !!js process.platform !== 'win32'
 ```
 
@@ -109,7 +109,7 @@ npm pack
 
 ### 启用
 
-重启后打开 **设置 → 通用**，底部会多出一行 **终端工具**（客户端半区注册的 `settings.general.item` 行，id `terminal-tool`，order 60）：
+重启后打开 **设置 → 通用**，底部会多出一行 **终端工具**（客户端半区注册的 `settings.general.item` 行，id `terminal-shell`，order 60）：
 
 ```
 终端工具                                     [Git Bash（bash） ▾]
@@ -132,8 +132,8 @@ Git Bash 路径                    [C:/Program Files/Git/bin/bash.exe]  [自动�
 
 | 路由 | 作用 |
 |---|---|
-| `POST /api/dsh-terminal-tool/state` | 平台、设置可用性、当前值、能力探测。**不扫描**，所以打开设置是瞬时的 |
-| `POST /api/dsh-terminal-tool/discover` | 用户点「自动发现」时才调用，返回全部可用候选 |
+| `POST /api/dsh-terminal-shell/state` | 平台、设置可用性、当前值、能力探测。**不扫描**，所以打开设置是瞬时的 |
+| `POST /api/dsh-terminal-shell/discover` | 用户点「自动发现」时才调用，返回全部可用候选 |
 
 Config 字段（设置行直接编辑 `dialect`、`confinedPolicy` 与 `bashPath`；点「自动发现」会原子写回 `bashPath` + `bashCandidates`；其余字段仍可直接写 profile patch）：
 
@@ -244,7 +244,7 @@ exit -1073741502
 诊断日志（每次会话一行）：
 
 ```
-%TEMP%\dsh-terminal-tool.log
+%TEMP%\dsh-terminal-shell.log
 ```
 
 用 `DSH_TERMINAL_TOOL_DIAG_FILE` 覆盖路径。典型行：
@@ -270,14 +270,14 @@ exit -1073741502
 
 ## 与其他插件共存
 
-本插件的占用面（都带 `terminal-tool` / `dsh-terminal-tool` 前缀，冲突时以先加载者为准）：
+本插件的占用面（都带 `terminal-shell` / `dsh-terminal-shell` 前缀，冲突时以先加载者为准）：
 
 | 面 | 名字 |
 |---|---|
-| 设置行 slot | `settings.general.item`，id `terminal-tool`，order `60` |
-| locale 命名空间 | `terminal-tool` |
-| bundle 行 id | `terminal-tool`（`cordis.patch.yml`） |
-| Host 路由 | `/api/dsh-terminal-tool/state`、`/api/dsh-terminal-tool/discover` |
+| 设置行 slot | `settings.general.item`，id `terminal-shell`，order `60` |
+| locale 命名空间 | `terminal-shell` |
+| bundle 行 id | `terminal-shell`（`cordis.patch.yml`） |
+| Host 路由 | `/api/dsh-terminal-shell/state`、`/api/dsh-terminal-shell/discover` |
 | 会话内工具 | 替换 `bash`、隐藏 `pwsh`（仅被替换的会话） |
 
 - **不写全局**：不改 `ctx.shell`、不改任何已加载的 preset、不写宿主安装目录。效果只落在 `agent/created` 时替换的那个会话上。
@@ -290,7 +290,7 @@ exit -1073741502
 
 官方 bundle 是**全局**的：它在宿主平面注册 `terminal_*` 工具，并拥有一个独立的 `terminals` 服务与注册表（默认 `pty` 后端）。本插件不接管、不注册也不读取那个注册表。
 
-本插件新增的 `dsh-terminal-tool/pty` 入口是另一种粒度：它把自己注册为 `gitbash` 类型的后端，而调用的位置在 `minimal` 克隆体自己的持久终端组（`isolate: { terminals: true }`）里。每个预设的 terminals 组是隔离的，所以两边的后端各归各的。
+本插件新增的 `dsh-terminal-shell/pty` 入口是另一种粒度：它把自己注册为 `gitbash` 类型的后端，而调用的位置在 `minimal` 克隆体自己的持久终端组（`isolate: { terminals: true }`）里。每个预设的 terminals 组是隔离的，所以两边的后端各归各的。
 
 若官方 bundle 已安装，变体预设的组里依然是官方 `pty` 行在前、本插件的 `gitbash-pty` 行在后，`terminal_*` 工具由前者的后端提供，本插件只是让组内的 `bash` 走持久 Git Bash。两者同时存在不会争抢同一注册表。
 
@@ -328,7 +328,7 @@ src/paths.ts      路径算术：安装根、PATH 条目、校验、PATH 合成
 src/executor.ts   GitBashExecutor（继承 LocalBashExecutor，含沙箱分支）
 src/confined.ts   受限沙箱启动决策（planLaunch）与 MSYS 启动失败签名
 src/preset.ts     预设变体管理：克隆官方 minimal 行、注册 / 注销、引用计数
-src/pty.ts        dsh-terminal-tool/pty 入口：注册 gitbash 类型的持久终端后端
+src/pty.ts        dsh-terminal-shell/pty 入口：注册 gitbash 类型的持久终端后端
 src/replace.ts    每会话替换 + 逆序回滚
 src/diag.ts       诊断日志
 src/types.ts      共享类型

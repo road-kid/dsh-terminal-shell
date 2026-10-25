@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
  * failure.
  */
 
-const LOG_NAME = 'dsh-terminal-tool.log'
+const LOG_NAME = 'dsh-terminal-shell.log'
 
 /** Where the diagnostic log lives. */
 export function diagnosticPath(): string {

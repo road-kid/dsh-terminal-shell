@@ -243,15 +243,15 @@ async function click(node) {
 await test('the stylesheet is claimed while the module materializes', async () => {
   for (const node of [...document.head.querySelectorAll('style[data-plugin]')]) node.remove()
   loadBundle()
-  const sheet = document.head.querySelector('style[data-plugin="dsh-terminal-tool"]')
+  const sheet = document.head.querySelector('style[data-plugin="dsh-terminal-shell"]')
   assert.ok(sheet, 'a sheet is injected as the module materializes')
   // `data-plugin` is what the loader removes on disable; `data-plugin-css` is
   // this module's own marker for reusing the tag across reloads.
-  assert.equal(sheet.getAttribute('data-plugin-css'), 'dsh-terminal-tool/row.css')
+  assert.equal(sheet.getAttribute('data-plugin-css'), 'dsh-terminal-shell/row.css')
   assert.match(sheet.textContent ?? '', /\.tterm-group\{/)
   // A reload reuses the owned tag instead of stacking a second sheet.
   loadBundle()
-  assert.equal(document.head.querySelectorAll('style[data-plugin="dsh-terminal-tool"]').length, 1)
+  assert.equal(document.head.querySelectorAll('style[data-plugin="dsh-terminal-shell"]').length, 1)
 })
 
 await test('the row ships the title, one sentence of description and the dialect dropdown', async () => {

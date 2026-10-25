@@ -7,7 +7,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Version numbering
 
-The project was renumbered once, before `0.6.0`, while the entire history was still
+The project was renumbered once, before `0.2.0`, while the entire history was still
 private: nothing had ever been tagged or published, so no external consumer ever saw
 the old numbers. Every historical release is now a patch release of `0.1.x`, because
 none of them were independently installable — each one depended on the previous to be
@@ -29,8 +29,8 @@ Design documents written before the renumber keep the numbers they were written 
 (`docs/PLAN-minimal-mode.md` describes `0.5.0`/`0.5.1`, `docs/PLAN-confined-bash.md`
 describes `0.4.0`, and `docs/PLAN-cmd-dialect.md` cites `0.4.1`/`0.5.1`); those are
 historical records of what the versions were called at the time. Use the table above
-to translate them. `0.6.0` is the first version released under the new numbering
-scheme and keeps its number.
+to translate them. The first version actually published under the new numbering is
+`0.1.7`; `0.2.0` is the next feature release (the `cmd` dialect).
 
 ## [Unreleased]
 
@@ -39,6 +39,16 @@ scheme and keeps its number.
 - A third terminal dialect for `cmd.exe` — see `docs/PLAN-cmd-dialect.md`.
 
 ## [0.1.7]
+
+### Changed
+
+- **Renamed to `dsh-terminal-shell`** (was `dsh-terminal-tool`). The rename covers
+  every identifier, not just the package name: the npm package, the bundle row id
+  (`terminal-shell`), the client slot id and locale namespace, the `./pty` entry id
+  (`terminal-shell-pty`), the two `/api/dsh-terminal-shell/*` routes, the generated
+  `minimal-gitbash` preset's `terminal-shell/pty` row name, and the diagnostic tag.
+  Nothing had ever been published under the old name, so no external consumer is
+  affected; an existing local install must be reinstalled under the new package name.
 
 ### Added
 
@@ -110,7 +120,7 @@ scheme and keeps its number.
 
 ### Added
 
-- Shared request/response types and two API routes: `POST /api/dsh-terminal-tool/state`
+- Shared request/response types and two API routes: `POST /api/dsh-terminal-shell/state`
   resolves the current state without scanning, and `/discover` scans only when
   clicked. Opening the settings page is therefore instant.
 - A DOM test that mounts the bundle under jsdom and clicks through it, so the JSX is
@@ -160,4 +170,4 @@ scheme and keeps its number.
 - `pwsh` is hidden with `tools.restrict({ deny: ['pwsh'] })` after confirming it is
   visible (restricting an unknown name throws), and its prompt section is blanked.
 - Discovery of local Git Bash installs that deliberately excludes WSL, diagnostics
-  written to `%TEMP%\dsh-terminal-tool.log`, and three test scripts.
+  written to `%TEMP%\dsh-terminal-shell.log`, and three test scripts.

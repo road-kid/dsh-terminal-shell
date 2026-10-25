@@ -8,6 +8,6 @@
 # The switch is the client half's row in Settings -> General (`src/client/`),
 # which edits this entry's volatile Config through `configForms`.
 - insert:
-    - id: terminal-tool
-      name: dsh-terminal-tool
+    - id: terminal-shell
+      name: dsh-terminal-shell
       disabled: !!js process.platform !== 'win32'

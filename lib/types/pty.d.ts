@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 
-export declare const name = 'terminal-tool-pty'
+export declare const name = 'terminal-shell-pty'
 export declare const inject: string[]
 export type PtyConfig = {
   readonly backendType: string

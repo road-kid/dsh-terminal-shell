@@ -8,7 +8,7 @@ import { planLaunch, type ConfinedPolicy } from './confined.ts'
 import { writeDiagnostic } from './diag.ts'
 
 /**
- * Persistent Git Bash backend (`dsh-terminal-tool/pty`).
+ * Persistent Git Bash backend (`dsh-terminal-shell/pty`).
  *
  * This module is mounted *inside* a preset's `persistent-shell` group
  * (`isolate: { terminals: true }`), never by the root plugin: it imports
@@ -33,7 +33,7 @@ import { writeDiagnostic } from './diag.ts'
 /** Backend type the preset rows point at (`config.backendType`). */
 const DEFAULT_BACKEND_TYPE = 'gitbash'
 
-export const name = 'terminal-tool-pty'
+export const name = 'terminal-shell-pty'
 
 /**
  * Exactly the official backend's dependencies: `BashTerminalBackend` reads
@@ -90,9 +90,9 @@ const TERMINAL_DEFAULTS = {
 
 function resolveBackendConfig(config: PtyConfig): ResolvedBackendConfig {
   const shellPath = config.bashPath.trim()
-  if (shellPath === '') throw new Error('terminal-tool/pty: bashPath must be non-empty')
+  if (shellPath === '') throw new Error('terminal-shell/pty: bashPath must be non-empty')
   const backendType = config.backendType.trim()
-  if (backendType === '') throw new Error('terminal-tool/pty: backendType must be non-empty')
+  if (backendType === '') throw new Error('terminal-shell/pty: backendType must be non-empty')
   return {
     ...TERMINAL_DEFAULTS,
     backendType,

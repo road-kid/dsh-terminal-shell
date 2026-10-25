@@ -1,7 +1,7 @@
 # 设计与实施单：终端选项新增 CMD（`cmd.exe`）方言
 
 - 状态：**方案评审中（未开工）**——本文档只做方案、分工与验收约定，不改任何源码
-- 目标版本：`0.6.0`
+- 目标版本：`0.2.0`
 - 关联：M1 受限沙箱策略 `confinedPolicy`（`0.4.1`，commit `2946e3b`）、M2 极简模式（`0.5.1`）
 - 基线事实：DSH `0.2.1-rc.2`；本插件 `0.5.1`，方案撰写时 HEAD `80ee65b`，工作区干净
   （`git status` 无改动，另有历史 stash `stash@{0}: On main: restore-deleted-sources` 与本方案无关）；
@@ -460,13 +460,13 @@ P0 契约冻结（Lead，0.5d）
 
 ### 6.4 发布规范
 
-- 语义化版本 `0.5.1 → 0.6.0`（新增方言，向后兼容）。
+- 语义化版本 `0.1.7 → 0.2.0`（新增方言，向后兼容）。
 - CHANGELOG 写明：新增 cmd 方言、默认沙箱档位变化、编码行为、已知限制。
 - README 的「已知限制」增加 cmd 三条：无持久终端、`chcp` 副作用、非 UTF-8 子程序输出可能仍乱码。
-- **发布渠道现状**：本插件当前只在 GitHub（`dsh plugin add github:<account>/dsh-terminal-tool`），
-  **未发布到 npm**（`registry.npmjs.org/dsh-terminal-tool` → Not found）。若要发布，需注意
-  `dsh-terminal-tool` 是**无 scope 名**，可能被抢注；建议要么抢注，要么改用 `@<scope>/dsh-terminal-tool`。
-  是否随 `0.6.0` 一起上 npm 见 §10 决策点 7。
+- **发布渠道现状**：本插件当前只在 GitHub（`dsh plugin add github:<account>/dsh-terminal-shell`），
+  **未发布到 npm**（`registry.npmjs.org/dsh-terminal-shell` → Not found）。若要发布，需注意
+  `dsh-terminal-shell` 是**无 scope 名**，可能被抢注；建议要么抢注，要么改用 `@<scope>/dsh-terminal-shell`。
+  是否随 `0.2.0` 一起上 npm 见 §10 决策点 7。
 - **dsh.so 验证**：现有记录 L1–L4 通过、L5 web smoke 失败；`dsh-shell-select` 也报同样错误，
   判断是检测器/环境问题而非插件缺陷，发布前不因此阻塞，但需在 CHANGELOG 里注明。
 
@@ -525,7 +525,7 @@ P0 契约冻结（Lead，0.5d）
 | M1 | P0 契约冻结 + P1/P2 实现 | 执行器与工具各自单测通过 |
 | M2 | P3 装配 + P4 UI | 设置页可选 CMD，新会话拿到 `cmd` 工具 |
 | M3 | P5 测试矩阵 | §7 必须项全绿 |
-| M4 | P6 文档 + 发布 `0.6.0` | `npm run check` 全绿 |
+| M4 | P6 文档 + 发布 `0.2.0` | `npm run check` 全绿 |
 
 ---
 
@@ -534,12 +534,12 @@ P0 契约冻结（Lead，0.5d）
 1. **工具名**：`cmd`（与现有 `bash`/`pwsh` 一致）——**建议**；还是改成社区 `dsh-shell-select` 那样
    统一的 `shell`（更稳，但对现有用户是破坏性变更，且要同时改 bash/pwsh 两条路径）。
 2. **cmd 方言的 `confinedPolicy` 默认值**：`escalate`（**建议**，让沙箱重新生效）还是沿用全局 `unconfined`。
-3. **后台作业**：`0.6.0` 是否一并实现 `run_in_background`（**建议是**，否则与 bash 方言能力不对等）。
+3. **后台作业**：`0.2.0` 是否一并实现 `run_in_background`（**建议是**，否则与 bash 方言能力不对等）。
 4. **编码开关**：是否需要 `cmdCodePage` 配置项（**建议是**，默认 65001）。
-5. **持久终端**：确认 `0.6.0` **不做** cmd PTY（理由见 §1.2 N1），后续是否单独立项。
-6. **发布节奏**：一次性发 `0.6.0`，还是先 `0.6.0-rc.1` 给一台机器验证。
+5. **持久终端**：确认 `0.2.0` **不做** cmd PTY（理由见 §1.2 N1），后续是否单独立项。
+6. **发布节奏**：一次性发 `0.2.0`，还是先 `0.2.0-rc.1` 给一台机器验证。
 7. **是否上 npm**：当前仅 GitHub 安装；若要上，无 scope 名有被抢注风险，建议同时决定命名
-   （保持 `dsh-terminal-tool` 抢注 vs 改 `@<scope>/dsh-terminal-tool`）。
+   （保持 `dsh-terminal-shell` 抢注 vs 改 `@<scope>/dsh-terminal-shell`）。
 8. **是否引入命令 denylist / cwd allowlist**：`@qianwenxue1/dsh-shell` 带了这两项。
    **建议不做**——官方 `tool-bash`/`tool-pwsh` 都没有 denylist，安全边界由沙箱（`confinedPolicy`）
    与 DSH 权限档负责；额外黑名单会给用户「虚假安全感」且易被绕过。若坚持要做，只作为可选配置默认关闭。

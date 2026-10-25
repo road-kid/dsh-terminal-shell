@@ -31,7 +31,7 @@ import type {
 } from './types.ts'
 
 /** Slot id of the row inside `settings.general.item`. */
-export const GENERAL_ITEM_ID = 'terminal-tool'
+export const GENERAL_ITEM_ID = 'terminal-shell'
 
 /** Order inside the General section, after 对话显示 / 繁忙时的发送行为. */
 export const GENERAL_ITEM_ORDER = 60
@@ -112,7 +112,7 @@ function seatRow(ctx: ClientContext, slots: SlotsService, t: Translate, form: Co
       current?.()
       off()
     }
-  }, 'terminal-tool: settings row')
+  }, 'terminal-shell: settings row')
 }
 
 export function apply(ctx: ClientContext): void {
@@ -132,7 +132,7 @@ export function apply(ctx: ClientContext): void {
         // dictionary is exactly what we want, so this is not an error.
         return undefined
       }
-    }, 'terminal-tool: locale')
+    }, 'terminal-shell: locale')
   }
 
   const t: Translate = locale?.bind(LOCALE_NAMESPACE) ?? ((key) => key)

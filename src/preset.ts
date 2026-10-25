@@ -33,7 +33,7 @@ const BACKEND_TYPE = 'gitbash'
 
 /** Row id/plugin name of the persistent Git Bash backend. */
 const PTY_ROW_ID = 'gitbash-pty'
-const PTY_ROW_NAME = 'dsh-terminal-tool/pty'
+const PTY_ROW_NAME = 'dsh-terminal-shell/pty'
 
 /**
  * `!!js` tag, copied verbatim from `@deepseek-ai/cordis-plugin-include`

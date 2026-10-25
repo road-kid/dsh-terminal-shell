@@ -65,7 +65,7 @@ await test('manifest declares the Web client half the loader scans for', () => {
 // with the page loader — a plain ESM/CJS bundle would load and do nothing.
 await test('client bundle has the module-loader script shape', async () => {
   const source = await readFile(join(root, 'lib', 'client.js'), 'utf8')
-  assert.match(source, /^window\.__ModuleLoader__\.load\(\{ id: "dsh-terminal-tool", factory: \(require\) => \{/)
+  assert.match(source, /^window\.__ModuleLoader__\.load\(\{ id: "dsh-terminal-shell", factory: \(require\) => \{/)
   assert.match(source, /return module\.exports; \} \}\);?\s*(\/\/# sourceMappingURL=.*)?$/m)
 })
 
@@ -87,7 +87,7 @@ await test('client bundle keeps react and the official atoms external', async ()
 // button for the hand-typed path. The class names are the contract with the
 // injected sheet, and the locale keys are the contract with the copy; if either
 // drifts the UI silently loses its layout or its text.
-await test('client bundle ships the terminal-tool row markup, copy and routes', async () => {
+await test('client bundle ships the terminal-shell row markup, copy and routes', async () => {
   const source = await readFile(join(root, 'lib', 'client.js'), 'utf8')
   for (const className of [
     'tterm-group',
@@ -128,14 +128,14 @@ await test('client bundle ships the terminal-tool row markup, copy and routes', 
   ]) {
     assert.match(source, new RegExp(`["'\`]${key}["'\`]`), `${key} is used`)
   }
-  assert.match(source, /\/api\/dsh-terminal-tool\/state/)
-  assert.match(source, /\/api\/dsh-terminal-tool\/discover/)
+  assert.match(source, /\/api\/dsh-terminal-shell\/state/)
+  assert.match(source, /\/api\/dsh-terminal-shell\/discover/)
 })
 
 await test('host bundle registers both settings-row routes', async () => {
   const source = await readFile(join(root, 'lib', 'index.js'), 'utf8')
-  assert.match(source, /\/api\/dsh-terminal-tool\/state/)
-  assert.match(source, /\/api\/dsh-terminal-tool\/discover/)
+  assert.match(source, /\/api\/dsh-terminal-shell\/state/)
+  assert.match(source, /\/api\/dsh-terminal-shell\/discover/)
   assert.match(source, /connection/)
   assert.match(source, /scanBashCandidates/)
 })
@@ -144,8 +144,8 @@ await test('bundle patch inserts exactly one Windows-guarded row', async () => {
   const patch = await readFile(join(root, 'cordis.patch.yml'), 'utf8')
   const inserts = patch.match(/-\s+insert:/g) ?? []
   assert.equal(inserts.length, 1, 'exactly one insert block')
-  assert.match(patch, /id:\s*terminal-tool/)
-  assert.match(patch, /name:\s*dsh-terminal-tool/)
+  assert.match(patch, /id:\s*terminal-shell/)
+  assert.match(patch, /name:\s*dsh-terminal-shell/)
   assert.match(patch, /disabled:\s*!!js process\.platform !== 'win32'/)
 })
 
@@ -162,7 +162,7 @@ await test('locale files declare display metadata', async () => {
 const mod = await import(new URL('../lib/index.js', import.meta.url).href)
 
 await test('built module exports the cordis plugin shape', () => {
-  assert.equal(mod.name, 'terminal-tool')
+  assert.equal(mod.name, 'terminal-shell')
   assert.equal(typeof mod.apply, 'function')
   assert.ok(Array.isArray(mod.inject))
   assert.ok(mod.Config !== undefined)
@@ -250,7 +250,7 @@ await test('the pty suite runs as part of check', async () => {
 await test('the host bundle ships the minimal-mode variant machinery', async () => {
   const source = await readFile(join(root, 'lib', 'index.js'), 'utf8')
   assert.match(source, /minimal-gitbash/)
-  assert.match(source, /dsh-terminal-tool\/pty/)
+  assert.match(source, /dsh-terminal-shell\/pty/)
   assert.match(source, /agentPresets/)
   assert.match(source, /minimal-left/)
 })

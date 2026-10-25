@@ -1,5 +1,5 @@
 {
-  "name": "dsh-terminal-tool",
+  "name": "dsh-terminal-shell",
   "version": "0.1.7",
   "type": "module",
   "description": "Switch the Windows terminal tool from pwsh to the local Git Bash, without touching presets or the global ctx.shell.",
@@ -10,11 +10,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/road-kid/dsh-terminal-tool.git"
+    "url": "git+https://github.com/road-kid/dsh-terminal-shell.git"
   },
-  "homepage": "https://github.com/road-kid/dsh-terminal-tool#readme",
+  "homepage": "https://github.com/road-kid/dsh-terminal-shell#readme",
   "bugs": {
-    "url": "https://github.com/road-kid/dsh-terminal-tool/issues"
+    "url": "https://github.com/road-kid/dsh-terminal-shell/issues"
   },
   "keywords": [
     "deepseek-harness",

@@ -1,9 +1,9 @@
-# dsh-terminal-tool — 设计文档
+# dsh-terminal-shell — 设计文档
 
 | 项 | 值 |
 |---|---|
-| 包名 | `dsh-terminal-tool` |
-| 插件 entry id | `terminal-tool` |
+| 包名 | `dsh-terminal-shell` |
+| 插件 entry id | `terminal-shell` |
 | 目标宿主 | DeepSeek Harness `>=0.2.1-rc.2 <0.3.0`（Windows / Desktop profile） |
 | 契约基线 | 各第一方包 `lib/types/*.d.ts`（0.2.1-rc.2，npm 实数） |
 | 文档状态 | 实现定稿（0.5.0）：新增 `minimalMode` 与 `minimal-gitbash` 预设变体（§13） |
@@ -38,10 +38,10 @@ DSH 在 Windows 上只组合 PowerShell 执行器：`@deepseek-ai/dsh-base` 的�
 | F10 | 自动发现 Git Bash，硬排除 WSL | 本插件 `discover.ts` |
 | F11 | 路径非法时安全降级（会话照旧 pwsh，不半坏） | 替换前置校验，失败只写诊断 |
 | F12 | 只对新会话生效 | 每个 `agent/created` 读取一次配置快照 |
-| F13 | 诊断日志 | `%TEMP%\dsh-terminal-tool.log`，`DSH_TERMINAL_TOOL_DIAG_FILE` 可改道 |
+| F13 | 诊断日志 | `%TEMP%\dsh-terminal-shell.log`，`DSH_TERMINAL_TOOL_DIAG_FILE` 可改道 |
 | F14 | 原生 Windows 程序中文输出乱码缓解 | 注入 `PYTHONIOENCODING=utf-8`（仅当未设置） |
 | F15 | 受限沙箱策略：`unconfined` / `escalate` / `fail`，默认 `unconfined` | `src/confined.ts` 的 `planLaunch` + 执行器分支 |
-| F16 | 极简模式：`minimalMode` 三值（默认 `oneshot`）；`variant` 下注册 `minimal-gitbash` 预设变体并接持久 Git Bash 后端 | `src/config.ts` 的 `minimalMode` + `src/preset.ts` + `src/pty.ts`（`dsh-terminal-tool/pty` 入口），见 §13 |
+| F16 | 极简模式：`minimalMode` 三值（默认 `oneshot`）；`variant` 下注册 `minimal-gitbash` 预设变体并接持久 Git Bash 后端 | `src/config.ts` 的 `minimalMode` + `src/preset.ts` + `src/pty.ts`（`dsh-terminal-shell/pty` 入口），见 §13 |
 
 ### 1.3 明确不做
 
@@ -171,7 +171,7 @@ MSYS2 在 Windows 受限档位下初始化命名共享内存就被拒，这不�
 
 ```
                  profile cordis.patch.yml (由 plugin_manager 写入)
-                 └── insert: terminal-tool  (win32 only, Config)
+                 └── insert: terminal-shell  (win32 only, Config)
                               │
    ┌──────────────────────────┴──────────────────────────────┐
    │ src/index.ts  apply(ctx, config)                        │
@@ -220,7 +220,7 @@ MSYS2 在 Windows 受限档位下初始化命名共享内存就被拒，这不�
 | `src/executor.ts` | `GitBashExecutor extends LocalBashExecutor`（含沙箱分支） | ~170 |
 | `src/confined.ts` | 受限启动决策 `planLaunch` 与 MSYS 启动失败签名分类 | ~80 |
 | `src/preset.ts` | 预设变体管理：读官方 `minimal` 文档、克隆并改写持久终端组、注册/注销、引用计数 | ~410 |
-| `src/pty.ts` | `dsh-terminal-tool/pty` 入口：以 `gitbash` 类型注册持久终端后端（复用官方 `BashTerminalBackend`） | ~170 |
+| `src/pty.ts` | `dsh-terminal-shell/pty` 入口：以 `gitbash` 类型注册持久终端后端（复用官方 `BashTerminalBackend`） | ~170 |
 | `src/replace.ts` | 每会话替换：校验、isolate、挂载、restrict、section、回滚 | ~200 |
 | `src/diag.ts` | 诊断日志（文件 + `DSH_TERMINAL_TOOL_DIAG_FILE`） | ~60 |
 | `src/types.ts` | 内部类型与可选服务的最窄投影 | ~80 |
@@ -237,8 +237,8 @@ MSYS2 在 Windows 受限档位下初始化命名共享内存就被拒，这不�
 
 ```yaml
 - insert:
-    - id: terminal-tool
-      name: dsh-terminal-tool
+    - id: terminal-shell
+      name: dsh-terminal-shell
       disabled: !!js process.platform !== 'win32'
 ```
 
@@ -249,11 +249,11 @@ MSYS2 在 Windows 受限档位下初始化命名共享内存就被拒，这不�
 
 ```
 设置 → 通用 → 终端工具（lib/client.js）
-  ├── 挂载：POST /api/dsh-terminal-tool/state（只读，不扫描）
-  │        + configForms.get('terminal-tool') 的 snapshot（值更可信）
+  ├── 挂载：POST /api/dsh-terminal-shell/state（只读，不扫描）
+  │        + configForms.get('terminal-shell') 的 snapshot（值更可信）
   │        /state 另带 minimalMode 与 variant（status / id / refs / reason）
   ├── 选择方言 / 受限策略 / 极简模式 / 提交路径 / 点「自动发现」：
-  │        POST /api/dsh-terminal-tool/discover（仅此时扫描）
+  │        POST /api/dsh-terminal-shell/discover（仅此时扫描）
   │        然后 configForms.mutate([...]) 一次原子写回（profile patch 层）
   └── 渲染：官方 Button / Input / Menu / IconChevronDownOutlineRegular
            + styles.ts 提供的两列版式
@@ -268,7 +268,7 @@ MSYS2 在 Windows 受限档位下初始化命名共享内存就被拒，这不�
 ## 4. 配置模型（`export const Config`）
 
 规则（`@deepseek-ai/dsh-settings` README）：**只有标了 `.volatile()` 的字段才会被投影进
-设置表单**；表单按 profile entry id（`terminal-tool`）定位本插件，由客户端半区渲染；
+设置表单**；表单按 profile entry id（`terminal-shell`）定位本插件，由客户端半区渲染；
 写入落到活动 profile 的 Cordis patch，保留注释与 `!!js` 表达式。因此本插件的 Config
 字段全部 `.volatile()`（schemastery 不允许在整个对象上标 `.volatile()`，逐个叶子标）。
 
@@ -454,7 +454,7 @@ Git Bash 的 `git`/`ls`/`grep` 需要 `Git\bin`、`Git\usr\bin`、以及 `ucrt64
 | 挂载工具失败 | 逆序回滚已完成的动作，写诊断 |
 | 命令超时 | 官方工具语义：`promoteOnTimeout` → 转后台 |
 | 受限沙箱下 Git Bash 启动失败 | 按 `confinedPolicy` 处理：`unconfined` 直接启动（命令不受文件沙箱限制）；`escalate` 标 `denied`，交给官方升级与审批链路；`fail` 抛 `SandboxUnavailableError`。不修改沙箱本身 |
-| 诊断日志 | `%TEMP%\dsh-terminal-tool.log`；`DSH_TERMINAL_TOOL_DIAG_FILE` 优先 |
+| 诊断日志 | `%TEMP%\dsh-terminal-shell.log`；`DSH_TERMINAL_TOOL_DIAG_FILE` 优先 |
 
 测试记录与生产日志分离：自测脚本一律设 `DSH_TERMINAL_TOOL_DIAG_FILE` 到临时文件。
 
@@ -494,7 +494,7 @@ Git Bash 的 `git`/`ls`/`grep` 需要 `Git\bin`、`Git\usr\bin`、以及 `ucrt64
 ## 10. 交付物
 
 ```
-dsh-terminal-tool/
+dsh-terminal-shell/
 ├── package.json          # name / dsh.bundle.patch / exports / files / engines
 ├── cordis.patch.yml      # 仅 Windows 挂载的一行 insert
 ├── tsconfig.json         # strict，noEmit
@@ -554,7 +554,7 @@ dsh-terminal-tool/
 | D2 | ~~用官方 settings 自动表单替代「设置→通用→终端工具」自定义行~~ | **该假设错误，已修正**：0.2.1-rc.2 的 `dsh-settings` 只在 Host 侧算 `volatileForm`/`autoGenerate`，全 asar 没有任何 client bundle 消费它渲染页面（`autoGenerate` 的语义只写在协议注释里）。因此设置页不会有任何自动 UI，必须自写 `settings.general.item` 行 —— 已实现于 `src/client/` |
 | V1 | `tools.register` 从 agent 子树注册的落点（本层 vs 全局层） | **已在集成测试中确认落在 agent 自己的层**：`bash` 对该 agent 可见、对祖先 preset scope 不可见；幂等仍靠 `tools.get('bash', agent)` 探测双保险 |
 | V2 | 官方 `tool-bash` 在 `isolate('shell')` 子树里解析 `ctx.shell` | **已由集成测试验证**：同一 agent 子树内的 `tool-bash` 拿到的是 `GitBashExecutor`，命令实际跑在 Git Bash 上（`uname -s` → `MINGW64_NT-…`） |
-| V3 | client 半区设置行 | **已完成**：`src/client/` 注册 `settings.general.item`（id `terminal-tool`，order 60）；终端的枚举选择是官方下拉 + `Menu`，路径是官方 `Input`（多候选时同一套下拉），「自动发现」是官方 outline `Button`；两条 `/api` 路由由 `src/routes.ts` 提供 |
+| V3 | client 半区设置行 | **已完成**：`src/client/` 注册 `settings.general.item`（id `terminal-shell`，order 60）；终端的枚举选择是官方下拉 + `Menu`，路径是官方 `Input`（多候选时同一套下拉），「自动发现」是官方 outline `Button`；两条 `/api` 路由由 `src/routes.ts` 提供 |
 | V4 | 设置行能否直接复用官方 UI atoms | **已验证**：`@deepseek-ai/dsh-client-ui-primitives` 由 Web shell 以 `PLATFORM_MODULES` 播种，client bundle 保持 external（contractcheck / clientsmoke 断言）；jsdom 渲染测试用 `scripts/primitives-double.mjs` 行为级替身，按 role/aria 断言 |
 | V5 | 注册变体后预设名册能否立刻看到 | **不能，已知体验缺口**：官方名册只在界面重新挂载时重拉（`ctx.remote.agentPresets.list()`），所以注册后已打开的新建会话界面不会立刻出现该项，需重开预设选择器（或刷新界面）才可见。M3 再研究刷新钩子 |
 | V6 | 用 `sessionQuery` 会话头判断变体是否仍被引用 | **有盲区，已接受的取舍**：切换了 preset 但尚未产生第一轮对话的会话，其持久化会话头可能还没写入新 preset，扫描会漏掉它。活跃会话投影覆盖同一时刻的在线会话，两者叠加才是完整判断；仍不足时只能靠「保留」而不是「删除」来兜底 |
@@ -573,7 +573,7 @@ dsh-terminal-tool/
 | `lib/types/index.d.ts` 手写后 `from './config.ts'` | 发布包里没有 `.ts` 源，类型解析会悬空 | 声明文件内联全部公共类型 |
 | 设置行自绘胶囊按钮 / `<input>` / `<select>`（早期版实现） | 与相邻官方设置项视觉、行为都不一致；官方对枚举偏好统一渲染成下拉 `Menu` | 改用官方 UI atoms（`Button` / `Input` / `Menu` / `IconChevronDownOutlineRegular`）；`styles.ts` 只保留版式 |
 | 「client bundle 不得 import 第一方值模块」（早期对 client purity 约束的理解） | 官方 UI atoms 由 Web shell 的冻结模块表提供，和 `react` 同类，官方 `PreferenceRow` 也是直接引用 | client bundle 正常 `require('@deepseek-ai/dsh-client-ui-primitives')` 并保持 external；其余第一方包仍不得进入 client bundle |
-| `dsh-terminal-tool/pty` 的 Config 含 `loginShell` / `pathEntries`（PLAN §5.3） | 实际只有 `backendType` / `bashPath` / `shellArgs` / `pythonUtf8` / `confinedPolicy`：持久终端不需要一次性执行器那套 PATH 合成，`shellArgs` 已能表达登录壳 | 以代码为准；`src/preset.ts` 仍会往 `gitbash-pty` 行写 `loginShell`，schemastery 会忽略该未知键——留作待清理项 |
+| `dsh-terminal-shell/pty` 的 Config 含 `loginShell` / `pathEntries`（PLAN §5.3） | 实际只有 `backendType` / `bashPath` / `shellArgs` / `pythonUtf8` / `confinedPolicy`：持久终端不需要一次性执行器那套 PATH 合成，`shellArgs` 已能表达登录壳 | 以代码为准；`src/preset.ts` 仍会往 `gitbash-pty` 行写 `loginShell`，schemastery 会忽略该未知键——留作待清理项 |
 | PLAN §5.3：「`bashPath` 由根插件填入，volatile 改了要重建变体」 | **已实现**：`converge()` 用 `specSignature()` 比较 `bashPath` / `confinedPolicy` / `loginShell` / `pythonUtf8`，不同则先注销再注册；相同则完全不碰定义（避免每次设置写入都退役一代 generation）。已绑定的会话继续跑旧 revision | 以代码为准 |
 | 第四行「极简模式」的测试覆盖 | `scripts/rendertest.mjs` 新增两项（三项菜单与写回、变体三态提示）；`scripts/rowselftest.mjs` 未单独加用例（控制器写入路径与 `setConfinedPolicy` 完全同构） | 以渲染层覆盖为准 |
 
@@ -609,7 +609,7 @@ bash），`bash` / `pwsh` 工具与 `tool:bash` 提示词段都由这一组提�
 preset 是 `minimal` 且 `minimalMode !== 'oneshot'` → `minimal-left`（新增的
 `SkipReason`，见 `src/diag.ts`）。
 
-### 13.3 独立入口 `dsh-terminal-tool/pty`
+### 13.3 独立入口 `dsh-terminal-shell/pty`
 
 变体需要「持久 Git Bash」后端，而持久后端属于 `@deepseek-ai/dsh-terminal-bash` 的
 能力面。把它做成**单独的导出入口**（`src/pty.ts` → `lib/pty.js`，`exports['./pty']`，
@@ -642,7 +642,7 @@ preset 是 `minimal` 且 `minimalMode !== 'oneshot'` → `minimal-left`（新增
 3. `structuredClone` 整棵行列表，仅改持久终端组：
    - 从该组的行列表里过滤掉 `terminal-pwsh` / `persistent-pwsh`；
    - 去掉 `persistent-bash` 上的 `disabled`，并把 `config.backendType` 设为 `gitbash`；
-   - 在 `pty` 行之后插入 `gitbash-pty` 行（`name: 'dsh-terminal-tool/pty'`）。
+   - 在 `pty` 行之后插入 `gitbash-pty` 行（`name: 'dsh-terminal-shell/pty'`）。
 4. 以 id `minimal-gitbash`、name「极简模式 · Git Bash」、order `3.1` 重新注册。
    遇到形状不符合预期的官方文档直接抛错（`minimal preset has no persistent-shell group`），
    不做猜测性修补——官方改了布局时应当明确失败，而不是生成一个半坏的预设。

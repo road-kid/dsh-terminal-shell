@@ -77,7 +77,7 @@ await build({
   legalComments: 'none',
 })
 
-// Persistent-terminal backend (`dsh-terminal-tool/pty`). A separate entry point
+// Persistent-terminal backend (`dsh-terminal-shell/pty`). A separate entry point
 // because it imports `@deepseek-ai/dsh-terminal-bash`, which is absent from
 // deployments without the persistent-terminal stack: only the preset row that
 // explicitly names this entry loads it.
@@ -109,7 +109,7 @@ await build({
   sourcemap: true,
   external: ['react', 'react/jsx-runtime', PRIMITIVES],
   banner: {
-    js: 'window.__ModuleLoader__.load({ id: "dsh-terminal-tool", factory: (require) => {\nvar module = { exports: {} }; var exports = module.exports;',
+    js: 'window.__ModuleLoader__.load({ id: "dsh-terminal-shell", factory: (require) => {\nvar module = { exports: {} }; var exports = module.exports;',
   },
   footer: { js: 'return module.exports; } });' },
   logLevel: 'warning',
@@ -122,7 +122,7 @@ await mkdir(join(outdir, 'types', 'client'), { recursive: true })
 // the row component from another package.
 await writeFile(
   join(outdir, 'types', 'client', 'index.d.ts'),
-  `export declare const name = 'terminal-tool'
+  `export declare const name = 'terminal-shell'
 export declare const inject: string[]
 export declare function apply(ctx: unknown): void
 `,
@@ -136,7 +136,7 @@ const declaration = `import type { Context } from '@deepseek-ai/cordis'
 import type { Config as BashLocalConfig } from '@deepseek-ai/dsh-bash-local'
 import z from '@deepseek-ai/schemastery'
 
-export declare const name = 'terminal-tool'
+export declare const name = 'terminal-shell'
 export declare const inject: string[]
 export type RawConfig = BashLocalConfig & {
   readonly dialect: 'pwsh' | 'bash'
@@ -175,7 +175,7 @@ await writeFile(
   `import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 
-export declare const name = 'terminal-tool-pty'
+export declare const name = 'terminal-shell-pty'
 export declare const inject: string[]
 export type PtyConfig = {
   readonly backendType: string

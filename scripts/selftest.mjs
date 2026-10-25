@@ -449,7 +449,7 @@ await test('registerRoutes mounts both routes on the connection service', async 
   })
   assert.deepEqual(
     registered.map((route) => route.path).sort(),
-    ['/api/dsh-terminal-tool/discover', '/api/dsh-terminal-tool/state'],
+    ['/api/dsh-terminal-shell/discover', '/api/dsh-terminal-shell/state'],
   )
   for (const route of registered) {
     assert.deepEqual(route.methods, ['POST'])
@@ -459,7 +459,7 @@ await test('registerRoutes mounts both routes on the connection service', async 
   // throws, so the row can show the reason instead of a bare status code.
   const state = registered.find((route) => route.path.endsWith('/state'))
   const response = await state.fetch(
-    new Request('http://x/api/dsh-terminal-tool/state', { method: 'POST', body: '{}' }),
+    new Request('http://x/api/dsh-terminal-shell/state', { method: 'POST', body: '{}' }),
   )
   assert.equal(response.status, 200)
   const body = await response.json()
@@ -569,7 +569,7 @@ await test('cloneMinimalForGitBash swaps the Windows terminal for the plugin bac
     ['pty', 'gitbash-pty', 'terminal-bash', 'persistent-bash'],
   )
   const pty = shell.config.find((row) => row.id === 'gitbash-pty')
-  assert.equal(pty.name, 'dsh-terminal-tool/pty')
+  assert.equal(pty.name, 'dsh-terminal-shell/pty')
   assert.equal(pty.config.bashPath, VARIANT_SPEC.bashPath)
   assert.equal(pty.config.backendType, 'gitbash')
   const tool = shell.config.find((row) => row.id === 'persistent-bash')
