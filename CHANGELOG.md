@@ -82,6 +82,12 @@ to translate them. The first version actually published under the new numbering 
 - `%~dp0`, `%0`, and `%1`–`%9` resolve against the plugin's internal script, not the
   model's command.
 - Non-ASCII output depends on the console code page; `cmdCodePage` is the escape hatch.
+- **Testing discipline**: the tool catalog is finalized when a session is created, so a
+  session opened before the plugin finished installing (or before the host restart that
+  activates it) never gets the `cmd` tool and leaves no diagnostic line at all. Verify a
+  fresh install by restarting the host completely and opening a **new** session; an old
+  session cannot be re-tested. This cost a full misdiagnosis once — see
+  `docs/DESIGN.md` §14.10.
 
 ## [0.1.7]
 

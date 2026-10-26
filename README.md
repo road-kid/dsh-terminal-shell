@@ -332,12 +332,13 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 
 排查思路：
 
-1. **工具目录还是 pwsh** → 先看日志有没有 `ok session=`。没有 `ok` 就按 `reason` 走。
-2. **`bash-not-found`** → 把 `bashPath` 显式指到 `C:\Program Files\Git\bin\bash.exe` 试试。
-3. **`cmd-not-found`** → 把 `cmdPath` 显式指到 `C:\WINDOWS\system32\cmd.exe`。
-4. **`mount-failed` / `cmd-mount-failed`** → `detail` 里是 cordis 的原始错误（常见是配置校验或服务缺失）。
-5. **bash 能出现但命令报错** → 见「已知限制」第 3、4、5 条。
-6. **cmd 能出现但命令报错** → 见「CMD 方言」与「已知限制」第 9 条。
+1. **会话建得比插件早**（最常见的假故障）→ 工具目录是**会话创建时定稿**的：宿主重启、插件刚装上、或设置刚改完时，**在这之前就打开的会话永远看不到新工具**，也不会补装。判定方法：日志里**没有**这个会话的 `ok session=` / `skip session=` 行 —— 因为 `agent/created` 根本没为它再触发过。处置：**完全退出并重启宿主，然后新建会话**，别在旧会话里复测。同理，改完方言/路径设置也必须新建会话（设置本身改的是 patch 层的 entry Config，对已装配的会话无效）。
+2. **工具目录还是 pwsh** → 先看日志有没有 `ok session=`。没有 `ok` 就按 `reason` 走。
+3. **`bash-not-found`** → 把 `bashPath` 显式指到 `C:\Program Files\Git\bin\bash.exe` 试试。
+4. **`cmd-not-found`** → 把 `cmdPath` 显式指到 `C:\WINDOWS\system32\cmd.exe`。
+5. **`mount-failed` / `cmd-mount-failed`** → `detail` 里是 cordis 的原始错误（常见是配置校验或服务缺失）。
+6. **bash 能出现但命令报错** → 见「已知限制」第 3、4、5 条。
+7. **cmd 能出现但命令报错** → 见「CMD 方言」与「已知限制」第 9 条。
 
 插件永不因自身问题让会话创建失败：`agent/created` 是串行派发的，监听器抛错会让 agent 注册失败，所以整个监听体是防御式的，任何异常只落日志。
 
@@ -374,7 +375,9 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 ## 已知限制
 
 1. **仅 Windows**。非 Windows 上 patch 行的 `disabled` 为真，插件根本不加载。
-2. **只对新会话生效**。工具与 prompt 段是会话创建时装配的，运行中无法替换。
+2. **只对新会话生效，且工具目录在会话创建那一刻就定稿**。工具与 prompt 段是会话创建时装配的（`agent/created` 串行派发），运行中无法替换、也不会事后补装。由此有两个直接后果：
+   - **重启后必须新建会话**。重启前已打开的会话（包括恢复出来的旧会话）不会被重新装配，插件对它们完全无感知——日志里连一行都不会出现。
+   - **不要在插件安装/设置变更与「建会话」之间抢时间**。宿主刚启动、插件还在激活时就点新建会话，那个会话拿到的是未替换的工具目录，看起来就像插件坏了。
 3. **受限沙箱下 Git Bash 无法直接进入沙箱**。`read-only` / `workspace-write` 用受限令牌执行，MSYS2 无法创建 `BaseNamedObjects`：
    ```
    bash.exe: *** fatal error - NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…): 0xC0000022
