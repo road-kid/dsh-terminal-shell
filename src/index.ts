@@ -70,7 +70,7 @@ function visible(ctx: Context, name: string): boolean {
  * is what keeps a silent no-op diagnosable.
  */
 export function probeCapability(ctx: Context): CapabilityView {
-  if (process.platform !== 'win32') return { supported: false, reason: '仅 Windows 支持切换终端工具' }
+  if (process.platform !== 'win32') return { supported: false, reason: '仅 Windows 支持切换终端 Shell' }
   if (!visible(ctx, 'tools')) return { supported: false, reason: '当前 DSH 版本不提供 ctx.tools（无法隐藏 pwsh）' }
   if (!visible(ctx, 'systemPrompt')) {
     return { supported: false, reason: '当前 DSH 版本不提供 ctx.systemPrompt（无法压掉 pwsh 提示词）' }

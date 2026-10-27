@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 
 import { CmdExecutor, planCmdLaunch } from '../src/cmd/executor.ts'
-import { discoverCmd } from '../src/cmd/discover.ts'
+import { discoverCmd, isCmdExecutable, scanCmdCandidates } from '../src/cmd/discover.ts'
 import {
   SCRATCH_PREFIX,
   ensureScratchDir,
@@ -249,6 +249,87 @@ await test('discoverCmd finds the real cmd.exe on this host', () => {
   assert.ok(existsSync(found.path), found.path)
   assert.ok(['comspec', 'system-root'].includes(found.source), found.source)
   assert.equal(basename(found.path).toLowerCase(), 'cmd.exe')
+})
+
+await test('isCmdExecutable accepts only a cmd.exe basename', () => {
+  assert.equal(isCmdExecutable('C:\\Windows\\System32\\cmd.exe'), true)
+  assert.equal(isCmdExecutable('c:/windows/system32/CMD.EXE'), true)
+  assert.equal(isCmdExecutable('C:\\Windows\\System32\\cmd.exe\\'), true)
+  assert.equal(isCmdExecutable('C:\\Program Files\\Git\\bin\\bash.exe'), false)
+  assert.equal(isCmdExecutable('C:\\Windows\\System32\\cmd.exe.bak'), false)
+  assert.equal(isCmdExecutable(''), false)
+})
+
+await test('discoverCmd ignores a configured path that is not cmd.exe', () => {
+  const root = tempRoot('discover-notcmd')
+  const bash = join(root, 'bash.exe')
+  writeFileSync(bash, '')
+  mkdirSync(join(root, 'System32'), { recursive: true })
+  const real = join(root, 'System32', 'cmd.exe')
+  writeFileSync(real, '')
+  // The bash path exists but is not cmd.exe, so the deterministic fallback wins.
+  assert.deepEqual(discoverCmd(bash, { SystemRoot: root }), { path: real, source: 'system-root' })
+})
+
+await test('scanCmdCandidates marks a non-cmd configured path invalid', () => {
+  const root = tempRoot('scan-notcmd')
+  const bash = join(root, 'bash.exe')
+  writeFileSync(bash, '')
+  mkdirSync(join(root, 'System32'), { recursive: true })
+  const real = join(root, 'System32', 'cmd.exe')
+  writeFileSync(real, '')
+  const list = scanCmdCandidates(bash, { SystemRoot: root })
+  assert.deepEqual(list[0], { path: bash, source: 'configured', valid: false })
+  assert.ok(list.some((candidate) => candidate.path === real && candidate.valid))
+})
+
+await test('scanCmdCandidates lists configured, ComSpec and System32 in priority order', () => {
+  const root = tempRoot('scan-cmd')
+  const configuredDir = join(root, 'custom')
+  mkdirSync(configuredDir, { recursive: true })
+  const configured = join(configuredDir, 'cmd.exe')
+  writeFileSync(configured, '')
+  const specDir = join(root, 'spec')
+  mkdirSync(specDir, { recursive: true })
+  const comspec = join(specDir, 'cmd.exe')
+  writeFileSync(comspec, '')
+  mkdirSync(join(root, 'System32'), { recursive: true })
+  const system = join(root, 'System32', 'cmd.exe')
+  writeFileSync(system, '')
+
+  assert.deepEqual(scanCmdCandidates(configured, { ComSpec: comspec, SystemRoot: root }), [
+    { path: configured, source: 'configured', valid: true },
+    { path: comspec, source: 'comspec', valid: true },
+    { path: system, source: 'system-root', valid: true },
+  ])
+})
+
+await test('scanCmdCandidates deduplicates one path reached through two sources', () => {
+  const root = tempRoot('scan-cmd-dedup')
+  mkdirSync(join(root, 'System32'), { recursive: true })
+  const exe = join(root, 'System32', 'cmd.exe')
+  writeFileSync(exe, '')
+  const list = scanCmdCandidates('', { ComSpec: exe, SystemRoot: root })
+  assert.deepEqual(list, [{ path: exe, source: 'comspec', valid: true }])
+})
+
+await test('scanCmdCandidates keeps a missing configured path but marks it invalid', () => {
+  const root = tempRoot('scan-cmd-invalid')
+  mkdirSync(join(root, 'System32'), { recursive: true })
+  const system = join(root, 'System32', 'cmd.exe')
+  writeFileSync(system, '')
+  const missing = join(root, 'nope.exe')
+  assert.deepEqual(scanCmdCandidates(missing, { SystemRoot: root }), [
+    { path: missing, source: 'configured', valid: false },
+    { path: system, source: 'system-root', valid: true },
+  ])
+})
+
+await test('scanCmdCandidates finds the real cmd.exe on this host', () => {
+  const list = scanCmdCandidates('')
+  assert.ok(list.length > 0, 'this host must expose cmd.exe')
+  assert.ok(list.every((candidate) => candidate.path.toLowerCase().endsWith('cmd.exe')))
+  assert.ok(list.some((candidate) => candidate.valid))
 })
 
 // --- §5.3 executor.ts (launch decision + shape) -----------------------------

@@ -260,11 +260,13 @@ await test('the row ships the title, one sentence of description and the dialect
   const view = await render(row.component, row.props)
   try {
     const text = view.text()
-    assert.match(text, /终端工具/)
-    assert.match(text, /模型执行命令时使用的终端；改动只影响新会话。/)
+    assert.match(text, /终端 Shell/)
+    assert.match(text, /选择智能体工具调用终端使用的 shell。改动后仅在新会话生效。/)
     // One control only: the dialect dropdown, showing the current value.
     assert.equal(view.triggers().length, 1, 'exactly one dropdown on the pwsh row')
-    assert.match(view.trigger('终端类型').textContent ?? '', /PowerShell（pwsh）/)
+    assert.equal(view.trigger('终端类型').textContent ?? '', 'powershell')
+    // Dialect names are the lowercase program names, not sentences.
+    assert.doesNotMatch(text, /PowerShell（pwsh）/)
     // The path row is bash-only.
     assert.doesNotMatch(text, /自动发现/)
     assert.doesNotMatch(text, /Git Bash 路径/)
@@ -283,7 +285,7 @@ await test('the dialect menu lists every kind and marks the current one', async 
     await click(view.trigger('终端类型'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['PowerShell（pwsh）', 'Git Bash（bash）', '命令提示符（cmd）'],
+      ['powershell', 'bash', 'cmd'],
     )
     // Selected rows are drawn with a leading check icon; the real primitive has
     // no `aria-selected` attribute to assert on.
@@ -306,9 +308,10 @@ await test('choosing Git Bash reveals the path row and writes the dialect', asyn
     await click(view.trigger('终端类型'))
     await click(view.menuItems()[1])
     assert.match(view.text(), /Git Bash 路径/)
-    assert.ok(view.button('自动发现'), 'the Auto-detect button appears with the path row')
-    // A missing path explains itself.
-    assert.match(view.text(), /点「自动发现」扫描本机/)
+    // No separate detect button: picking the dialect is what scans.
+    assert.equal(view.button('自动发现'), undefined)
+    // A missing path explains how it will be found.
+    assert.match(view.text(), /选择 Git Bash 后会自动扫描本机/)
     assert.deepEqual(form.mutations, [[{ op: 'set', path: ['dialect'], value: 'bash' }]])
     assert.equal(view.menu(), null, 'the menu closes after a choice')
   } finally {
@@ -316,20 +319,17 @@ await test('choosing Git Bash reveals the path row and writes the dialect', asyn
   }
 })
 
-await test('the bash row shows the confined-sandbox choice, the pwsh row does not', async () => {
+await test('the bash row shows the sandbox policy, the pwsh row does not', async () => {
   const form = formStub({ dialect: 'bash', bashPath: 'C:\\Git\\bin\\bash.exe', bashCandidates: [] })
   const row = mountRow({ form, state: READY_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
   try {
     const text = view.text()
-    assert.match(text, /受限沙箱时/)
-    assert.match(
-      text,
-      /Windows 沙箱会把命令降到低完整性，Git Bash 无法在其中启动；这里决定此时怎么办。/,
-    )
-    // The default choice is to run directly, and the row says what that costs.
-    assert.match(view.trigger('受限沙箱时').textContent ?? '', /直接启动（不经沙箱）/)
-    assert.equal(view.host.querySelector('[role="note"]')?.textContent, '注意：选它之后，模型执行的命令不受文件沙箱限制。')
+    assert.match(text, /沙箱策略/)
+    assert.match(text, /选择当 Windows 沙箱将命令降为低完整性，bash 启动受限时的行为模式/)
+    // One sentence under the label, one dropdown next to it — no extra notice.
+    assert.equal(view.trigger('沙箱策略').textContent ?? '', '绕过沙箱')
+    assert.equal(view.host.querySelector('[role="note"]'), null)
     assert.deepEqual(form.mutations, [], 'mounting never writes')
   } finally {
     await view.unmount()
@@ -340,29 +340,29 @@ await test('the bash row shows the confined-sandbox choice, the pwsh row does no
   const pwshRow = mountRow({ form: pwshForm, state: READY_STATE, discover: { candidates: [] } })
   const pwshView = await render(pwshRow.component, pwshRow.props)
   try {
-    assert.equal(pwshView.trigger('受限沙箱时'), null, 'no confined-sandbox dropdown on the pwsh row')
-    assert.doesNotMatch(pwshView.text(), /受限沙箱时/)
+    assert.equal(pwshView.trigger('沙箱策略'), null, 'no sandbox dropdown on the pwsh row')
+    assert.doesNotMatch(pwshView.text(), /沙箱策略/)
     assert.equal(pwshView.host.querySelector('[role="note"]'), null)
   } finally {
     await pwshView.unmount()
   }
 })
 
-await test('choosing a confined policy writes it', async () => {
+await test('choosing a sandbox policy writes it', async () => {
   const form = formStub({ dialect: 'bash', bashPath: 'C:\\Git\\bin\\bash.exe', bashCandidates: [] })
   const row = mountRow({ form, state: READY_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
   try {
-    await click(view.trigger('受限沙箱时'))
+    await click(view.trigger('沙箱策略'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['直接启动（不经沙箱）', '受限执行，失败后升级', '报告错误'],
+      ['绕过沙箱', '申请权限'],
+      'the retired "report an error" answer is not offered',
     )
     await click(view.menuItems()[1])
     assert.deepEqual(form.mutations, [[{ op: 'set', path: ['confinedPolicy'], value: 'escalate' }]])
-    assert.match(view.trigger('受限沙箱时').textContent ?? '', /受限执行，失败后升级/)
+    assert.equal(view.trigger('沙箱策略').textContent ?? '', '申请权限')
     assert.equal(view.menu(), null, 'the menu closes after a choice')
-    // Only the unconfined choice carries the warning.
     assert.equal(view.host.querySelector('[role="note"]'), null)
   } finally {
     await view.unmount()
@@ -375,16 +375,16 @@ await test('the minimal-mode row offers the three choices and writes one', async
   const view = await render(row.component, row.props)
   try {
     assert.match(view.text(), /极简模式/)
-    assert.match(view.text(), /只影响使用官方「极简模式」预设的会话/)
-    assert.equal(view.trigger('极简模式').textContent ?? '', '换成一次性 bash')
+    assert.match(view.text(), /选择「极简模式」预设下 pwsh 持久终端的行为模式，添加新预设使用持久 bash 变体/)
+    assert.equal(view.trigger('极简模式').textContent ?? '', '单次 bash')
     await click(view.trigger('极简模式'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['保持官方持久终端', '换成一次性 bash', '添加 Git Bash 变体'],
+      ['保持 pwsh', '单次 bash', '添加新预设'],
     )
     await click(view.menuItems()[2])
     assert.deepEqual(form.mutations, [[{ op: 'set', path: ['minimalMode'], value: 'variant' }]])
-    assert.match(view.trigger('极简模式').textContent ?? '', /添加 Git Bash 变体/)
+    assert.equal(view.trigger('极简模式').textContent ?? '', '添加新预设')
   } finally {
     await view.unmount()
   }
@@ -478,8 +478,8 @@ await test('editing the path input and pressing Enter persists it', async () => 
   }
 })
 
-await test('Auto-detect scans, then the path control becomes a dropdown of the hits', async () => {
-  const form = formStub({ dialect: 'bash', bashPath: '', bashCandidates: [] })
+await test('choosing Git Bash scans, then the path control becomes a dropdown of the hits', async () => {
+  const form = formStub({ dialect: 'pwsh', bashPath: '', bashCandidates: [] })
   const row = mountRow({
     form,
     state: READY_STATE,
@@ -492,15 +492,17 @@ await test('Auto-detect scans, then the path control becomes a dropdown of the h
   })
   const view = await render(row.component, row.props)
   try {
-    await click(view.button('自动发现'))
+    await click(view.trigger('终端类型'))
+    await click(view.menuItems()[1])
     // Two hits turn the path control into a dropdown; the dialect and confined
     // ones stay.
     assert.equal(view.triggers().length, 4, 'the path control is now a dropdown too')
     const trigger = view.trigger('Git Bash 路径')
     assert.match(trigger.textContent ?? '', /C:\\Git\\bin\\bash\.exe/)
-    // The pick and the candidate list are persisted together.
-    assert.equal(form.mutations.length, 1)
-    assert.deepEqual(form.mutations[0], [
+    // First write: the dialect. Second: the pick and the candidate list, together.
+    assert.equal(form.mutations.length, 2)
+    assert.deepEqual(form.mutations[0], [{ op: 'set', path: ['dialect'], value: 'bash' }])
+    assert.deepEqual(form.mutations[1], [
       { op: 'set', path: ['bashPath'], value: 'C:\\Git\\bin\\bash.exe' },
       {
         op: 'set',
@@ -523,14 +525,15 @@ await test('Auto-detect scans, then the path control becomes a dropdown of the h
   }
 })
 
-await test('Auto-detect with no hits explains itself instead of clearing the path', async () => {
-  const form = formStub({ dialect: 'bash', bashPath: '', bashCandidates: [] })
+await test('choosing Git Bash with no hits explains itself instead of clearing the path', async () => {
+  const form = formStub({ dialect: 'pwsh', bashPath: '', bashCandidates: [] })
   const row = mountRow({ form, state: READY_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
   try {
-    await click(view.button('自动发现'))
-    assert.match(view.text(), /没有找到 Git Bash，请直接填入 bash\.exe 的完整路径。/)
-    assert.deepEqual(form.mutations, [])
+    await click(view.trigger('终端类型'))
+    await click(view.menuItems()[1])
+    assert.match(view.text(), /没有找到可用的终端程序/)
+    assert.deepEqual(form.mutations, [[{ op: 'set', path: ['dialect'], value: 'bash' }]])
   } finally {
     await view.unmount()
   }
@@ -555,7 +558,7 @@ await test('the row is absent off Windows and mounting it wrote nothing', async 
   }
 })
 
-await test('a read-only form locks the dropdown and the Auto-detect button', async () => {
+await test('a read-only form locks the dropdown and the path field', async () => {
   const form = formStub({ dialect: 'bash', bashPath: '', bashCandidates: [] })
   form.getSnapshot = () => ({
     status: 'ready',
@@ -568,8 +571,7 @@ await test('a read-only form locks the dropdown and the Auto-detect button', asy
   try {
     assert.equal(view.triggers().length, 3)
     assert.equal(view.trigger('终端类型').disabled, true, 'a non-writable form disables the dropdown')
-    assert.equal(view.trigger('受限沙箱时').disabled, true, 'and the confined-policy one')
-    assert.equal(view.button('自动发现').disabled, true, 'and the Auto-detect button')
+    assert.equal(view.trigger('沙箱策略').disabled, true, 'and the sandbox-policy one')
     assert.equal(view.host.querySelector('input[aria-label="Git Bash 路径"]').disabled, true)
   } finally {
     await view.unmount()
@@ -602,27 +604,51 @@ await test('choosing cmd reveals the cmd fields and hides the bash ones', async 
     await click(view.trigger('终端类型'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['PowerShell（pwsh）', 'Git Bash（bash）', '命令提示符（cmd）'],
+      ['powershell', 'bash', 'cmd'],
     )
     await click(view.menuItems()[2])
     const text = view.text()
     assert.match(text, /cmd\.exe 路径/)
     assert.match(text, /留空则自动使用系统 cmd\.exe/)
-    assert.match(text, /cmd 的限制/)
-    assert.match(text, /独立的批处理脚本/)
-    assert.match(text, /%~dp0 指向本插件的内部脚本/)
-    assert.match(text, /命令回显无法关闭或恢复/)
     assert.match(text, /控制台代码页/)
-    // Bash-only fields are gone, not greyed out.
+    // Bash-only fields are gone, not greyed out. The minimal row stays: keeping
+    // the official pwsh terminal vs. a one-shot cmd is a real choice for cmd.
     assert.doesNotMatch(text, /Git Bash 路径/)
-    assert.doesNotMatch(text, /极简模式/)
+    assert.match(text, /极简模式/)
+    assert.match(text, /选择「极简模式」预设下 pwsh 持久终端的行为模式/)
+    assert.ok(
+      text.indexOf('极简模式') < text.indexOf('控制台代码页'),
+      'the minimal row sits above the code page row',
+    )
     assert.equal(view.button('自动发现'), undefined)
-    assert.equal(view.triggers().length, 2, 'dialect + cmd sandbox policy only')
+    assert.equal(view.triggers().length, 3, 'dialect + sandbox policy + minimal mode')
     assert.equal(view.host.querySelector('input[aria-label="cmd.exe 路径"]').value, '')
     assert.equal(view.host.querySelector('input[aria-label="控制台代码页"]').value, '65001')
-    assert.equal(view.trigger('受限沙箱时').textContent, '受限执行，失败后升级')
+    // The sandbox row is the same one the bash dialect renders: same label, same
+    // copy, same two answers.
+    assert.equal(view.trigger('沙箱策略').textContent, '申请权限')
     assert.deepEqual(form.mutations, [[{ op: 'set', path: ['dialect'], value: 'cmd' }]])
     assert.equal(view.menu(), null)
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('the cmd minimal row offers keep-pwsh / one-shot cmd', async () => {
+  const form = formStub({ dialect: 'cmd', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    // Default is one-shot, and the cmd wording must not say "bash".
+    assert.equal(view.trigger('极简模式').textContent, '单次 cmd')
+    await click(view.trigger('极简模式'))
+    assert.deepEqual(
+      view.menuItems().map((item) => item.textContent),
+      ['保持 pwsh', '单次 cmd'],
+      'no persistent-bash variant is offered for cmd',
+    )
+    await click(view.menuItems()[0])
+    assert.deepEqual(form.mutations, [[{ op: 'set', path: ['minimalMode'], value: 'leave' }]])
   } finally {
     await view.unmount()
   }
@@ -647,7 +673,42 @@ await test('the cmd code page commits a number and rejects junk', async () => {
   }
 })
 
-await test('the cmd path commits and the sandbox choice shows its notice', async () => {
+await test('the cmd path refuses a non-cmd.exe program', async () => {
+  const form = formStub({ dialect: 'cmd', bashPath: '', bashCandidates: [] })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    const input = view.host.querySelector('input[aria-label="cmd.exe 路径"]')
+    await typeInto(input, 'C:\\Program Files\\Git\\bin\\bash.exe')
+    // Nothing is written and the row explains why; the text stays so it can be fixed.
+    assert.deepEqual(form.mutations, [], 'a bash path is never saved as cmdPath')
+    assert.match(view.text(), /不能是 bash 或其它程序/)
+    assert.equal(input.value, 'C:\\Program Files\\Git\\bin\\bash.exe')
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('a corrupted cmdPath is never rendered as the selected cmd', async () => {
+  // A profile that still holds a bash path must not surface it in the cmd row.
+  const form = formStub({
+    dialect: 'cmd',
+    bashPath: 'C:\\Program Files\\Git\\bin\\bash.exe',
+    bashCandidates: [],
+    cmdPath: 'C:\\Program Files\\Git\\bin\\bash.exe',
+  })
+  const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
+  const view = await render(row.component, row.props)
+  try {
+    const input = view.host.querySelector('input[aria-label="cmd.exe 路径"]')
+    assert.equal(input.value, '', 'the bad stored value is dropped, so the field starts empty')
+    assert.doesNotMatch(view.text(), /Git\\bin\\bash\.exe/)
+  } finally {
+    await view.unmount()
+  }
+})
+
+await test('the cmd path commits and the sandbox choice writes', async () => {
   const form = formStub({ dialect: 'cmd', bashPath: '', bashCandidates: [] })
   const row = mountRow({ form, state: CMD_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
@@ -656,18 +717,16 @@ await test('the cmd path commits and the sandbox choice shows its notice', async
     assert.deepEqual(form.mutations, [
       [{ op: 'set', path: ['cmdPath'], value: 'C:/Windows/System32/cmd.exe' }],
     ])
-    // The limits note is on screen, but it is not the "no sandbox" warning.
-    assert.equal(view.host.querySelector('[role="note"]')?.textContent.includes('不受文件沙箱限制'), false)
-    await click(view.trigger('受限沙箱时'))
+    assert.equal(view.host.querySelector('[role="note"]'), null)
+    await click(view.trigger('沙箱策略'))
     assert.deepEqual(
       view.menuItems().map((item) => item.textContent),
-      ['受限执行，失败后升级', '直接启动（不经沙箱）'],
-      'cmd has no fail member',
+      ['绕过沙箱', '申请权限'],
+      'cmd and bash share one sandbox menu',
     )
-    await click(view.menuItems()[1])
+    await click(view.menuItems()[0])
     assert.deepEqual(form.mutations[1], [{ op: 'set', path: ['cmdConfinedPolicy'], value: 'unconfined' }])
-    assert.match(view.text(), /不受文件沙箱限制/)
-    assert.equal(view.trigger('受限沙箱时').textContent, '直接启动（不经沙箱）')
+    assert.equal(view.trigger('沙箱策略').textContent, '绕过沙箱')
   } finally {
     await view.unmount()
   }
@@ -681,7 +740,7 @@ await test('the pwsh row never shows a cmd field', async () => {
     const text = view.text()
     assert.doesNotMatch(text, /cmd\.exe 路径/)
     assert.doesNotMatch(text, /控制台代码页/)
-    assert.doesNotMatch(text, /cmd 的限制/)
+    assert.doesNotMatch(text, /沙箱策略/)
     assert.equal(view.triggers().length, 1)
   } finally {
     await view.unmount()

@@ -61,7 +61,7 @@ type EntryRow = Record<string, unknown>
 export interface VariantSpec {
   /** Absolute path of the Git Bash the persistent backend must launch. */
   readonly bashPath: string
-  readonly confinedPolicy: 'unconfined' | 'escalate' | 'fail'
+  readonly confinedPolicy: 'unconfined' | 'escalate'
   readonly loginShell: boolean
   readonly pythonUtf8: boolean
 }
@@ -402,7 +402,7 @@ export async function resolveVariantSpec(options: {
   readonly bashCandidates: readonly string[]
   readonly autoDiscover: boolean
   readonly timeoutMs: number
-  readonly confinedPolicy: 'unconfined' | 'escalate' | 'fail'
+  readonly confinedPolicy: 'unconfined' | 'escalate'
   readonly loginShell: boolean
   readonly pythonUtf8: boolean
 }): Promise<VariantSpec | undefined> {

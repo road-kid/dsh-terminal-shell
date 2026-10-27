@@ -20,24 +20,28 @@ const PLUGIN_ID = 'dsh-terminal-shell'
 export const STYLE_TAG_ID = 'dsh-terminal-shell/row.css'
 
 const CSS = `
-.tterm-group{display:flex;flex-direction:column;gap:12px;padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}
-.tterm-row{display:flex;align-items:center;justify-content:space-between;gap:24px}
-.tterm-text{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
-.tterm-title{color:var(--dsw-alias-label-primary);font-size:14px;line-height:20px}
+.tterm-group{display:flex;flex-direction:column}
+.tterm-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}
+.tterm-row:last-child{border-bottom:none}
+.tterm-text{display:flex;flex-direction:column;gap:4px;flex:1 1 0;min-width:0}
+.tterm-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}
+.tterm-field-label{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}
 .tterm-description{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .tterm-hint{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
 .tterm-error{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}
-.tterm-field-label{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}
 .tterm-dialect{display:inline-flex;flex:none}
 .tterm-selector{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);font:inherit;font-size:14px;line-height:22px;cursor:pointer}
 .tterm-selector:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .tterm-selector:disabled{cursor:not-allowed;opacity:.4}
 .tterm-selector-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .tterm-chevron{flex:none}
-.tterm-path-control{display:flex;align-items:center;gap:8px;flex:none;width:min(440px,100%)}
+.tterm-path-control{display:flex;align-items:center;gap:8px;flex:0 1 auto;width:auto;min-width:0;max-width:min(440px,46%)}
+.tterm-row--path .tterm-text{flex:0 1 34%;min-width:0}
+.tterm-row--path .tterm-path-control{flex:1 1 auto;max-width:none;min-width:0}
 .tterm-path-input{flex:1;min-width:0}
 .tterm-path-selector{display:flex;flex:1;min-width:0}
 .tterm-path-selector .tterm-selector{width:100%}
+.tterm-path-selector .tterm-selector-value{text-overflow:clip}
 .tterm-code-page-input{flex:none;width:120px}
 `.trim()
 

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 
 import { writeDiagnostic } from './diag.ts'
 import { scanBashCandidates } from './discover.ts'
+import { scanCmdCandidates } from './cmd/discover.ts'
 import type { ConfigSnapshot } from './config.ts'
 import {
   ROUTE_DISCOVER,
@@ -81,8 +82,8 @@ function messageOf(error: unknown): string {
 }
 
 /** Project an internal candidate onto the wire shape. */
-function toView(candidate: { path: string; source: string }): CandidateView {
-  return { path: candidate.path, source: candidate.source as CandidateView['source'], valid: true }
+function toView(candidate: { path: string; source: string; valid: boolean }): CandidateView {
+  return { path: candidate.path, source: candidate.source as CandidateView['source'], valid: candidate.valid }
 }
 
 /**
@@ -114,10 +115,26 @@ export function createHandlers(deps: RouteDeps): {
 
   const discover = async (body: Record<string, unknown>): Promise<DiscoverView> => {
     const snapshot = deps.readSnapshot()
+    // The dialect decides which candidates the row is asking about: Git Bash
+    // (filesystem sweep) or cmd.exe (deterministic ComSpec/SystemRoot resolve).
+    // Absent a `dialect`, fall back to bash — the pre-cmd client sent only
+    // `bashPath`.
+    const dialect = body.dialect === 'cmd' ? 'cmd' : 'bash'
     // The client may pass the path currently in the form (which is not yet
-    // saved); it takes priority over the persisted value so "自动发现" keeps a
-    // half-typed path selectable.
-    const inFlight = typeof body.bashPath === 'string' ? body.bashPath : ''
+    // saved); it takes priority over the persisted value so a half-typed path
+    // stays selectable while discovery runs.
+    const inFlight =
+      typeof body.path === 'string' ? body.path : typeof body.bashPath === 'string' ? body.bashPath : ''
+
+    if (dialect === 'cmd') {
+      const saved = inFlight.length > 0 ? inFlight : snapshot.cmdPath
+      const candidates = scanCmdCandidates(saved).map(toView)
+      writeDiagnostic(
+        `discover dialect=cmd saved=${saved.trim() === '' ? '(auto)' : saved} candidates=${String(candidates.length)} valid=${String(candidates.filter((candidate) => candidate.valid).length)}`,
+      )
+      return { candidates }
+    }
+
     const saved = inFlight.length > 0 ? inFlight : snapshot.bashPath
     const candidates = await scanBashCandidates({
       bashPath: saved,
@@ -125,6 +142,9 @@ export function createHandlers(deps: RouteDeps): {
       autoDiscover: true,
       timeoutMs: snapshot.discoverTimeoutMs,
     })
+    writeDiagnostic(
+      `discover dialect=bash saved=${saved.trim() === '' ? '(auto)' : saved} candidates=${String(candidates.length)} valid=${String(candidates.filter((candidate) => candidate.valid).length)}`,
+    )
     return { candidates: candidates.map(toView) }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-terminal-shell",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Choose which shell backs the Windows terminal tool: PowerShell, the local Git Bash, or cmd.exe. No preset edits, no global ctx.shell takeover.",
   "license": "MIT",

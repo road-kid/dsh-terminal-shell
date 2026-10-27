@@ -202,15 +202,6 @@ export class GitBashExecutor extends LocalBashExecutor {
       return decorateResult(execution, (result) => ({ ...result, sandbox: facts }))
     }
 
-    // Fail: a confined Windows launch whose configured policy refuses to run.
-    // `planLaunch` only returns this for a resolved confined policy.
-    if (plan.kind === 'fail') {
-      if (policy === undefined || policy.mode === 'danger-full-access') {
-        throw new Error('confined launch plan without a confined sandbox policy')
-      }
-      throw new SandboxUnavailableError(policy.mode, plan.reason)
-    }
-
     // `planLaunch` only chooses `confine` when both are present; the guard keeps
     // the types honest without duplicating the decision.
     if (sandbox === undefined || policy === undefined) {

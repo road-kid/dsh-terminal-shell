@@ -20,12 +20,11 @@ import type { ConfinedSandboxMode, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 /**
  * How to launch `cmd.exe` when the standing sandbox policy is confined.
  *
- * Deliberately has **no `fail` member**, unlike `ConfinedPolicy` in
- * `src/confined.ts`: that type exists because Git Bash/MSYS2 cannot start under
- * a restricted token on Windows, so "refuse instead of silently unconfining"
- * was a real choice. `cmd.exe` starts fine under the same token — it is what the
- * official windows-acl backend uses as its own functional probe — so a cmd
- * launch can never be impossible for sandbox reasons.
+ * Kept separate from `ConfinedPolicy` in `src/confined.ts` because the two
+ * dialects have independent fields and different defaults (`cmd` defaults to
+ * `escalate`, Git Bash to `unconfined`). Neither type has a "refuse" member:
+ * `cmd.exe` starts fine under a restricted token — it is what the official
+ * windows-acl backend uses as its own functional probe.
  */
 export type CmdConfinedPolicy = 'escalate' | 'unconfined'
 

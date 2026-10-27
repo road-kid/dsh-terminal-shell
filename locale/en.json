@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Terminal Tool",
-    "description": "Choose the terminal the model runs commands in — PowerShell, the local Git Bash, or the Command Prompt (cmd) — for new sessions."
+    "title": "Terminal shell",
+    "description": "Choose the shell the agent runs tool calls in — powershell, the local Git Bash, or cmd — for new sessions."
   }
 }

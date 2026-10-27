@@ -8,7 +8,7 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
  * what the executor does about that, without the plugin ever approving an
  * escalation itself (that belongs to the first-party `tool-bash`).
  */
-export type ConfinedPolicy = 'unconfined' | 'escalate' | 'fail'
+export type ConfinedPolicy = 'unconfined' | 'escalate'
 
 /**
  * Stderr substrings that identify an MSYS2 startup denial.
@@ -62,13 +62,11 @@ export interface LaunchInput {
  * The launch strategy for one execution:
  *
  * - `direct` runs the configured bash argv without the sandbox;
- * - `confine` hands the same argv to `SandboxProvider.confine()`;
- * - `fail` refuses to run and reports why.
+ * - `confine` hands the same argv to `SandboxProvider.confine()`.
  */
 export type LaunchPlan =
   | { readonly kind: 'confine' }
   | { readonly kind: 'direct' }
-  | { readonly kind: 'fail'; readonly reason: string }
 
 /**
  * Decide how one execution should be launched.
@@ -76,8 +74,8 @@ export type LaunchPlan =
  * Only Windows needs the policy: on every other platform the sandbox can start
  * MSYS2 itself, so a confined mode is always honoured. On Windows, a confined
  * mode cannot start Git Bash, and the configured choice decides between
- * running unconfined, failing so the first-party tool can offer its escalation,
- * or failing with a configuration error.
+ * running unconfined and keeping the confined launch so that the first-party
+ * tool can offer its escalation.
  *
  * @param input - the provider, policy, choice and platform facts.
  */
@@ -89,14 +87,5 @@ export function planLaunch(input: LaunchInput): LaunchPlan {
   // Non-Windows MSYS starts fine under a confined sandbox.
   if (input.platform !== 'win32') return { kind: 'confine' }
   if (input.choice === 'unconfined') return { kind: 'direct' }
-  if (input.choice === 'escalate') return { kind: 'confine' }
-  return { kind: 'fail', reason: unavailableReason(input.policyMode) }
-}
-
-/** The configuration-level explanation for a `fail` plan. */
-function unavailableReason(mode: SandboxMode): string {
-  return (
-    `Git Bash cannot start under the ${mode} sandbox on Windows; ` +
-    'set confinedPolicy to "unconfined" or retry with sandbox_permissions: danger-full-access'
-  )
+  return { kind: 'confine' }
 }

@@ -3,7 +3,7 @@
  *
  * The bundle is loaded by `dsh-client-modules` as a classic script and calls
  * `apply(ctx)` once per plugin fiber. It contributes exactly one thing: the
- * 设置 → 通用 → 终端工具 row.
+ * 设置 → 通用 → 终端 Shell row.
  *
  * ### Why `configForms` is not in `inject`
  *

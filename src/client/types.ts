@@ -43,15 +43,14 @@ export interface ConfigFormLike<T> {
  *
  * Mirrors `Config` in `src/config.ts` field for field, but only the fields this
  * row edits. `cmdConfinedPolicy` is deliberately *not* `confinedPolicy`: the two
- * dialects have different legal sets (cmd has no `fail`, because `cmd.exe` starts
- * under a restricted token while Git Bash does not), so sharing one field would
- * force one dialect to carry a value it cannot honour.
+ * dialects have independent fields, so a malformed value in one never changes
+ * the other.
  */
 export interface TerminalToolValues {
   readonly dialect?: 'pwsh' | 'bash' | 'cmd'
   readonly bashPath?: string
   readonly bashCandidates?: readonly string[]
-  readonly confinedPolicy?: 'unconfined' | 'escalate' | 'fail'
+  readonly confinedPolicy?: 'unconfined' | 'escalate'
   readonly minimalMode?: 'leave' | 'oneshot' | 'variant'
   readonly cmdPath?: string
   readonly cmdCodePage?: number

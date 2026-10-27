@@ -31,7 +31,7 @@ import {
 import { discoverBash, scanBashCandidates } from '../src/discover.ts'
 import { createHandlers, registerRoutes } from '../src/routes.ts'
 import { createRowController, createStore, INITIAL_ROW_STATE, knownPaths } from '../src/client/store.ts'
-import { executorConfig, snapshotConfig, wantsBash } from '../src/config.ts'
+import { Config, executorConfig, snapshotConfig, wantsBash } from '../src/config.ts'
 import { isMsysStartupDenial, planLaunch, MSYS_DENIAL_EXIT_CODES } from '../src/confined.ts'
 import {
   cloneMinimalForGitBash,
@@ -259,11 +259,11 @@ await test('executorConfig passes plain values, not volatile wrappers', () => {
 })
 
 await test('snapshotConfig reads every confinedPolicy value', () => {
-  for (const value of ['unconfined', 'escalate', 'fail']) {
+  for (const value of ['unconfined', 'escalate']) {
     assert.equal(snapshotConfig({ confinedPolicy: value }).confinedPolicy, value)
     assert.equal(snapshotConfig({ confinedPolicy: { get: () => value } }).confinedPolicy, value)
   }
-  assert.equal(executorConfig(snapshotConfig({ confinedPolicy: 'fail' })).confinedPolicy, 'fail')
+  assert.equal(executorConfig(snapshotConfig({ confinedPolicy: 'escalate' })).confinedPolicy, 'escalate')
 })
 
 await test('snapshotConfig falls back to unconfined for an unknown confinedPolicy', () => {
@@ -294,7 +294,7 @@ await test('isMsysStartupDenial ignores ordinary command failures', () => {
 
 await test('planLaunch runs directly when there is nothing to confine', () => {
   assert.deepEqual(
-    planLaunch({ hasSandbox: false, policyMode: 'workspace-write', choice: 'fail', platform: 'win32' }),
+    planLaunch({ hasSandbox: false, policyMode: 'workspace-write', choice: 'escalate', platform: 'win32' }),
     { kind: 'direct' },
   )
   assert.deepEqual(
@@ -326,17 +326,10 @@ await test('planLaunch confines outside Windows and follows the Windows policy',
   )
 })
 
-await test('planLaunch fails closed with actionable guidance on Windows', () => {
-  const plan = planLaunch({
-    hasSandbox: true,
-    policyMode: 'read-only',
-    choice: 'fail',
-    platform: 'win32',
-  })
-  assert.equal(plan.kind, 'fail')
-  assert.match(plan.reason, /read-only/)
-  assert.match(plan.reason, /confinedPolicy/)
-  assert.match(plan.reason, /danger-full-access/)
+await test('the confinedPolicy schema only accepts the two shipped values', () => {
+  assert.throws(() => Config({ confinedPolicy: 'fail' }))
+  assert.doesNotThrow(() => Config({ confinedPolicy: 'escalate' }))
+  assert.doesNotThrow(() => Config({ confinedPolicy: 'unconfined' }))
 })
 
 // --- settings-row read surface ---------------------------------------------

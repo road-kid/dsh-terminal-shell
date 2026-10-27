@@ -1,4 +1,4 @@
-import { ROUTE_DISCOVER, ROUTE_STATE, type DiscoverView, type StateView } from '../shared/protocol.ts'
+import { ROUTE_DISCOVER, ROUTE_STATE, type Dialect, type DiscoverView, type StateView } from '../shared/protocol.ts'
 
 /**
  * Fetch helpers for the two Host routes.
@@ -47,9 +47,17 @@ export function fetchState(signal?: AbortSignal): Promise<StateView> {
 }
 
 /**
- * Run one discovery sweep.
+ * Run one discovery sweep for a dialect.
+ * @param dialect - which candidate set to ask for (`bash` sweeps the disk,
+ *   `cmd` resolves `ComSpec`/`SystemRoot`).
  * @param saved - the path currently in the form, kept selectable even unsaved.
  */
-export function fetchCandidates(saved: string | undefined, signal?: AbortSignal): Promise<DiscoverView> {
-  return post<DiscoverView>(ROUTE_DISCOVER, saved === undefined || saved === '' ? {} : { bashPath: saved }, signal)
+export function fetchCandidates(
+  dialect: Dialect,
+  saved: string | undefined,
+  signal?: AbortSignal,
+): Promise<DiscoverView> {
+  const body: Record<string, unknown> = { dialect }
+  if (saved !== undefined && saved !== '') body.path = saved
+  return post<DiscoverView>(ROUTE_DISCOVER, body, signal)
 }

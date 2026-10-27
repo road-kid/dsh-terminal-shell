@@ -1,7 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import {
-  Button,
   IconChevronDownOutlineRegular,
   Input,
   Menu,
@@ -10,6 +9,7 @@ import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 
 import {
   createRowController,
+  knownCmdPaths,
   knownPaths,
   normalizeDialect,
   type Dialect,
@@ -22,38 +22,43 @@ import type { ConfinedPolicy } from '../confined.ts'
 import type { RowProps } from './types.ts'
 
 /**
- * The 设置 → 通用 → 终端工具 row.
+ * The 设置 → 通用 → 终端 Shell row.
  *
  * Shape, copied from the two official row types that surround it in the General
- * section:
+ * section: one title + one sentence at the top, then one row per setting.
  *
  * ```
- * 终端工具                                        [PowerShell（pwsh） ▾]
- * 模型执行命令时使用的终端；改动只影响新会话。
- * Git Bash 路径                                   [C:/…/bash.exe     ▾] [自动发现]
+ * 终端 Shell                                            [powershell ▾]
+ * 选择智能体工具调用终端使用的 shell。改动后仅在新会话生效。
+ * Git Bash 路径                              [C:/…/bash.exe      ▾]
+ * 沙箱策略                                              [绕过沙箱 ▾]
+ * 选择沙箱将命令降为低完整性时的行为模式
  * ```
  *
  * Every control is an official `@deepseek-ai/dsh-client-ui-primitives`
- * component, so buttons, the dropdown trigger, the menu card and its rows are
- * pixel-identical to the neighbouring settings: `Menu` for both enumerated
- * choices (the section renders *every* enumerated preference as a dropdown),
- * `Input` for a hand-typed path, `Button` for 自动发现. This file only owns
- * layout, copy and the two-column row skeleton.
+ * component, so the dropdown trigger, the menu card and its rows are
+ * pixel-identical to the neighbouring settings: `Menu` for every enumerated
+ * preference (the section renders *every* enumerated preference as a dropdown),
+ * `Input` for a hand-typed path. This file only owns layout, copy and the
+ * two-column row skeleton.
  *
  * Deliberate choices:
  *
  * - **Nothing renders until the platform is known** (`status !== 'ready'`
  *   returns null), otherwise the row flashes in and then disappears on Linux.
- * - **No candidate list is rendered.** The path control *is* the picker: it
- *   becomes a dropdown once the sweep found more than one bash.
+ * - **No candidate list is rendered and no "detect" button exists.** Picking a
+ *   terminal kind is what triggers discovery; the path control *is* the picker —
+ *   it becomes a dropdown once more than one executable is known. Git Bash and
+ *   cmd share the same `PathRow`, so the two dialects behave identically.
  * - **The input is uncontrolled between commits** so a settings round trip
  *   cannot eat keystrokes.
  * - **Fields follow the dialect, and nothing else.** `pwsh` shows the dialect
  *   choice only; `bash` shows the bash path, the sandbox policy and the minimal
- *   mode; `cmd` shows the `cmd.exe` path, the code page and its own sandbox
- *   policy. A field is never rendered "greyed out" for a dialect that cannot
- *   honour it — it is simply absent, so the row cannot suggest a setting that
- *   does nothing.
+ *   mode; `cmd` shows the `cmd.exe` path, the console code page and the *same*
+ *   sandbox policy row the bash dialect uses (label, copy and the two answers are
+ *   shared, so the two dialects cannot drift apart). A field is never rendered
+ *   "greyed out" for a dialect that cannot honour it — it is simply absent, so the
+ *   row cannot suggest a setting that does nothing.
  */
 
 /** Id of the path control, used by the visible label. */
@@ -123,6 +128,89 @@ function Selector(props: {
 }
 
 /**
+ * One path row, shared by the Git Bash and cmd dialects.
+ *
+ * Both dialects answer the same question ("which executable should a session
+ * run?"); the only difference is the copy and how discovery is spelled on the
+ * Host. Rendering them through one component is what keeps their pickers,
+ * spacing and empty/error states identical.
+ *
+ * The control is a `Selector` when more than one executable is known and an
+ * `Input` otherwise, exactly like the enum preferences above it. There is no
+ * "detect" button: discovery is triggered by choosing the terminal kind.
+ */
+function PathRow(props: {
+  readonly label: string
+  readonly description?: string | undefined
+  readonly hint?: string | undefined
+  readonly notice?: string | undefined
+  readonly inputId: string
+  readonly placeholder: string
+  readonly noneLabel: string
+  readonly paths: readonly string[]
+  readonly selected: string
+  readonly draft: string
+  readonly disabled: boolean
+  readonly onDraftChange: (value: string) => void
+  readonly onCommit: () => void
+  readonly onPick: (path: string) => void
+}): ReactElement {
+  const items: readonly MenuEntry[] = props.paths.map((path) => ({ id: path, label: path }))
+  const trimmed = props.selected.trim()
+  return (
+    <div className="tterm-row tterm-row--path">
+      <div className="tterm-text">
+        <label className="tterm-field-label" htmlFor={props.paths.length > 1 ? undefined : props.inputId}>
+          {props.label}
+        </label>
+        {props.description === undefined ? null : (
+          <div className="tterm-description">{props.description}</div>
+        )}
+        {props.hint === undefined ? null : <div className="tterm-hint">{props.hint}</div>}
+        {props.notice === undefined ? null : (
+          <div className="tterm-hint" role="status">
+            {props.notice}
+          </div>
+        )}
+      </div>
+
+      <div className="tterm-path-control">
+        {props.paths.length > 1 ? (
+          <Selector
+            className="tterm-path-selector"
+            label={props.label}
+            value={trimmed === '' ? props.noneLabel : props.selected}
+            items={items}
+            selectedId={props.selected}
+            disabled={props.disabled}
+            onSelect={(path) => {
+              if (path !== props.selected) props.onPick(path)
+            }}
+          />
+        ) : (
+          <Input
+            id={props.inputId}
+            className="tterm-path-input"
+            aria-label={props.label}
+            placeholder={props.placeholder}
+            value={props.draft}
+            disabled={props.disabled}
+            onChange={(event) => props.onDraftChange(event.target.value)}
+            onBlur={props.onCommit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                props.onCommit()
+              }
+            }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Parse a hand-typed code page.
  *
  * Strict on purpose: `chcp` accepts a handful of magic values (`437`, `65001`,
@@ -178,6 +266,7 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
   const bashPath = state.bashPath.trim()
   const cmdPath = state.cmdPath.trim()
   const paths = knownPaths(state)
+  const cmdPaths = knownCmdPaths(state)
 
   /** Commit the typed bash path, if it changed. */
   const commitPath = (): void => {
@@ -215,23 +304,24 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
     { id: 'bash', label: t('row.dialect.bash') },
     { id: 'cmd', label: t('row.dialect.cmd') },
   ]
-  const pathItems: readonly MenuEntry[] = paths.map((path) => ({ id: path, label: path }))
+  // Both dialects share one policy row: the same two answers apply, so label,
+  // copy and selector are identical. A profile that still stores the retired
+  // `fail` value keeps rendering its label, but the menu no longer offers it.
   const confinedItems: readonly MenuEntry[] = [
     { id: 'unconfined', label: t('row.confined.unconfined') },
     { id: 'escalate', label: t('row.confined.escalate') },
-    { id: 'fail', label: t('row.confined.fail') },
-  ]
-  // No `fail` member, unlike the bash policy: `cmd.exe` starts under a
-  // restricted Windows token, so "refuse to run" would be a setting that can
-  // never fire.
-  const cmdConfinedItems: readonly MenuEntry[] = [
-    { id: 'escalate', label: t('row.cmdConfinedPolicy.escalate') },
-    { id: 'unconfined', label: t('row.cmdConfinedPolicy.unconfined') },
   ]
   const minimalItems: readonly MenuEntry[] = [
     { id: 'leave', label: t('row.minimal.leave') },
     { id: 'oneshot', label: t('row.minimal.oneshot') },
     { id: 'variant', label: t('row.minimal.variant') },
+  ]
+  // The cmd dialect has no persistent backend, so "add a new preset" (which is
+  // a persistent bash variant) is not offered here: only keeping the official
+  // pwsh terminal and replacing it with a one-shot cmd mean anything.
+  const cmdMinimalItems: readonly MenuEntry[] = [
+    { id: 'leave', label: t('row.minimal.leave') },
+    { id: 'oneshot', label: t('row.minimal.oneshotCmd') },
   ]
 
   return (
@@ -272,61 +362,31 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
 
       {dialect === 'bash' ? (
         <>
-          <div className="tterm-row">
-            <div className="tterm-text">
-              <div className="tterm-field-label">{t('row.path.label')}</div>
-              {bashPath === '' ? <div className="tterm-hint">{t('row.path.missing')}</div> : null}
-            </div>
-
-            <div className="tterm-path-control">
-              {paths.length > 1 ? (
-                <Selector
-                  className="tterm-path-selector"
-                  label={t('row.path.label')}
-                  value={bashPath === '' ? t('row.path.none') : bashPath}
-                  items={pathItems}
-                  selectedId={bashPath}
-                  disabled={!controlsEnabled}
-                  onSelect={(path) => {
-                    if (path !== bashPath) controller.setBashPath(path)
-                  }}
-                />
-              ) : (
-                <Input
-                  id={PATH_CONTROL_ID}
-                  className="tterm-path-input"
-                  type="text"
-                  spellCheck={false}
-                  autoComplete="off"
-                  aria-label={t('row.path.label')}
-                  placeholder={t('row.path.placeholder')}
-                  value={draft}
-                  disabled={!controlsEnabled}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onBlur={commitPath}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      commitPath()
-                    }
-                  }}
-                />
-              )}
-              <Button variant="outline" size="sm" disabled={!controlsEnabled} onClick={() => controller.discover()}>
-                {state.discovering ? t('row.discovering') : t('row.discover')}
-              </Button>
-            </div>
-          </div>
+          <PathRow
+            label={t('row.path.label')}
+            hint={
+              state.discovering
+                ? t('row.discovering')
+                : bashPath === ''
+                  ? t('row.path.missing')
+                  : undefined
+            }
+            inputId={PATH_CONTROL_ID}
+            placeholder={t('row.path.placeholder')}
+            noneLabel={t('row.path.none')}
+            paths={paths}
+            selected={bashPath}
+            draft={draft}
+            disabled={!controlsEnabled}
+            onDraftChange={setDraft}
+            onCommit={commitPath}
+            onPick={controller.setBashPath}
+          />
 
           <div className="tterm-row">
             <div className="tterm-text">
               <div className="tterm-field-label">{t('row.confined.label')}</div>
-              <div className="tterm-description">{t('row.confined.description')}</div>
-              {state.confinedPolicy === 'unconfined' ? (
-                <div className="tterm-hint" role="note">
-                  {t('row.confined.unconfinedNotice')}
-                </div>
-              ) : null}
+              <div className="tterm-description">{t('row.confined.description', { shell: 'bash' })}</div>
             </div>
 
             <Selector
@@ -337,7 +397,7 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
               selectedId={state.confinedPolicy}
               disabled={!controlsEnabled}
               onSelect={(id) => {
-                const next: ConfinedPolicy = id === 'escalate' ? 'escalate' : id === 'fail' ? 'fail' : 'unconfined'
+                const next: ConfinedPolicy = id === 'escalate' ? 'escalate' : 'unconfined'
                 if (next !== state.confinedPolicy) controller.setConfinedPolicy(next)
               }}
             />
@@ -385,38 +445,74 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
 
       {dialect === 'cmd' ? (
         <>
+          <PathRow
+            label={t('row.cmdPath.label')}
+            description={t('row.cmdPath.description')}
+            hint={state.discovering ? t('row.discovering') : undefined}
+            inputId={CMD_PATH_CONTROL_ID}
+            placeholder={t('row.cmdPath.placeholder')}
+            noneLabel={t('row.path.none')}
+            paths={cmdPaths}
+            selected={cmdPath}
+            draft={cmdDraft}
+            disabled={!controlsEnabled}
+            onDraftChange={setCmdDraft}
+            onCommit={commitCmdPath}
+            onPick={controller.setCmdPath}
+          />
+
+          {/* Same order as the bash dialect: executable first, then the sandbox
+              policy, then whatever is specific to the dialect. */}
           <div className="tterm-row">
             <div className="tterm-text">
-              <div className="tterm-field-label">{t('row.cmdPath.label')}</div>
-              <div className="tterm-description">{t('row.cmdPath.description')}</div>
-              {/* The dialect's limits, stated once, where the user first meets it. */}
-              <div className="tterm-hint" role="note">
-                {t('row.cmd.limits')}
-              </div>
+              <div className="tterm-field-label">{t('row.confined.label')}</div>
+              <div className="tterm-description">{t('row.confined.description', { shell: 'cmd' })}</div>
             </div>
 
-            <div className="tterm-path-control">
-              <Input
-                id={CMD_PATH_CONTROL_ID}
-                className="tterm-path-input"
-                type="text"
-                spellCheck={false}
-                autoComplete="off"
-                aria-label={t('row.cmdPath.label')}
-                placeholder={t('row.cmdPath.placeholder')}
-                value={cmdDraft}
+            <Selector
+              className="tterm-dialect"
+              label={t('row.confined.label')}
+              value={t(`row.confined.${state.cmdConfinedPolicy}`)}
+              items={confinedItems}
+              selectedId={state.cmdConfinedPolicy}
+              disabled={!controlsEnabled}
+              onSelect={(id) => {
+                const next: CmdConfinedPolicy = id === 'unconfined' ? 'unconfined' : 'escalate'
+                if (next !== state.cmdConfinedPolicy) controller.setCmdConfinedPolicy(next)
+              }}
+            />
+          </div>
+
+          {state.supported ? (
+            <div className="tterm-row">
+              <div className="tterm-text">
+                <div className="tterm-field-label">{t('row.minimal.label')}</div>
+                <div className="tterm-description">{t('row.minimal.cmdDescription')}</div>
+                {state.variant?.status === 'registered' ? (
+                  <div className="tterm-hint" role="note">
+                    {t('row.minimal.variantReady', { id: state.variant.id })}
+                  </div>
+                ) : state.variant?.status === 'failed' ? (
+                  <div className="tterm-error" role="alert">
+                    {t('row.minimal.variantFailed', { reason: state.variant.reason ?? '' })}
+                  </div>
+                ) : null}
+              </div>
+
+              <Selector
+                className="tterm-dialect"
+                label={t('row.minimal.label')}
+                value={state.minimalMode === 'oneshot' ? t('row.minimal.oneshotCmd') : t(`row.minimal.${state.minimalMode}`)}
+                items={cmdMinimalItems}
+                selectedId={state.minimalMode}
                 disabled={!controlsEnabled}
-                onChange={(event) => setCmdDraft(event.target.value)}
-                onBlur={commitCmdPath}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    commitCmdPath()
-                  }
+                onSelect={(id) => {
+                  const next: MinimalMode = id === 'leave' ? 'leave' : 'oneshot'
+                  if (next !== state.minimalMode) controller.setMinimalMode(next)
                 }}
               />
             </div>
-          </div>
+          ) : null}
 
           <div className="tterm-row">
             <div className="tterm-text">
@@ -442,31 +538,6 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
                   event.preventDefault()
                   commitCodePage()
                 }
-              }}
-            />
-          </div>
-
-          <div className="tterm-row">
-            <div className="tterm-text">
-              <div className="tterm-field-label">{t('row.cmdConfinedPolicy.label')}</div>
-              <div className="tterm-description">{t('row.cmdConfinedPolicy.description')}</div>
-              {state.cmdConfinedPolicy === 'unconfined' ? (
-                <div className="tterm-hint" role="note">
-                  {t('row.cmdConfinedPolicy.unconfinedNotice')}
-                </div>
-              ) : null}
-            </div>
-
-            <Selector
-              className="tterm-dialect"
-              label={t('row.cmdConfinedPolicy.label')}
-              value={t(`row.cmdConfinedPolicy.${state.cmdConfinedPolicy}`)}
-              items={cmdConfinedItems}
-              selectedId={state.cmdConfinedPolicy}
-              disabled={!controlsEnabled}
-              onSelect={(id) => {
-                const next: CmdConfinedPolicy = id === 'unconfined' ? 'unconfined' : 'escalate'
-                if (next !== state.cmdConfinedPolicy) controller.setCmdConfinedPolicy(next)
               }}
             />
           </div>

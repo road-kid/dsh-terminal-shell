@@ -1,6 +1,11 @@
 # 实施单：M1 —— 受限沙箱下让 Git Bash 可用（confinedPolicy）
 
 状态：已实施（M1 完成，测试全绿；M2 见另一会话报告 §5 与 REVIEW 结论）
+
+> **后续变更（0.2.0 设置行改版）**：设置行的标题与选项文案重写过，本单里的旧标签
+> 仅作历史记录 —— `row.confined.label` 现为「沙箱策略」，选项现为「绕过沙箱」（`unconfined`）/
+> 「申请权限」（`escalate`），`fail` 不再出现在界面上（仍是合法配置值）。以 `src/client/locales.ts` 为准。
+
 范围：只做 M1。M2（持久终端 gitbash backend）不在本轮。
 
 ## 1. 背景（一句话）

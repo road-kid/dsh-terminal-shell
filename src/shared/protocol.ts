@@ -7,7 +7,8 @@
  *   current values, capability probe. **Never scans**: the settings row reads
  *   this on every mount and a sweep spawns `reg.exe`.
  * - `POST /api/dsh-terminal-shell/discover` — rescan candidates (pure query, no
- *   side effects). Only called when the user clicks 自动发现.
+ *   side effects). Called when the user switches the terminal kind to `bash` or
+ *   `cmd`; it never runs on mount.
  *
  * Persistence does **not** go through these routes: the browser half edits the
  * plugin's own entry Config through the official `configForms` service, so the
@@ -73,7 +74,7 @@ export interface VariantView {
   readonly reason?: string
 }
 
-/** One discovered bash executable (the client only reads this subset). */
+/** One discovered executable (the client only reads this subset). */
 export interface CandidateView {
   readonly path: string
   readonly source:
@@ -85,6 +86,10 @@ export interface CandidateView {
     | 'msys2'
     | 'cygwin'
     | 'path'
+    /** `cmd.exe` from `%ComSpec%` (cmd dialect only). */
+    | 'comspec'
+    /** `cmd.exe` from `%SystemRoot%\System32\cmd.exe` (cmd dialect only). */
+    | 'system-root'
   readonly valid: boolean
 }
 
@@ -130,7 +135,7 @@ export interface StateView {
   readonly bashPath: string
   /** Configured `cmd.exe` override, or `''` to auto-resolve (see `discover.ts`). */
   readonly cmdPath: string
-  /** Persisted candidate list from the last 自动发现 sweep. */
+  /** Persisted candidate list from the last discovery sweep. */
   readonly bashCandidates: readonly string[]
   readonly capability: CapabilityView
   /** How the official `minimal` preset is treated. */

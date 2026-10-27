@@ -155,21 +155,6 @@ await test('unconfined starts Git Bash and keeps state across two sends', async 
   await ctx.fiber.dispose()
 })
 
-await test('fail refuses with SANDBOX_UNAVAILABLE instead of launching', async () => {
-  const { ctx, backend } = await mount('workspace-write', 'fail')
-  const { owner, preset, scope } = makeOwner(ctx)
-  let error
-  try {
-    await backend().spawn({ type: 'gitbash', name: 'acceptance', owner })
-  } catch (thrown) {
-    error = thrown
-  }
-  assert.ok(error, 'a fail policy must not spawn')
-  assert.equal(error.code, 'SANDBOX_UNAVAILABLE')
-  await preset.dispose()
-  await ctx.fiber.dispose()
-})
-
 await test('escalate goes through the sandbox and fails where MSYS cannot start', async () => {
   const { ctx, backend } = await mount('workspace-write', 'escalate')
   const { owner, preset } = makeOwner(ctx)

@@ -106,7 +106,7 @@ v1 写于改名前、且在两轮实测之前，有 15 处需要修正的地方�
 | **D3** | 保留 `cmdTransport: 'env'` 作兜底 | 复测：`%DSH_CMD%` 一次性展开对 `echo %PATH%` 输出字面量、对多行只取第一行、对中文输出 GBK | 删除该配置项；传输只有临时脚本一条路径 |
 | **D4** | argv 写成 `[cmdPath, '/d', '/s', '/c', scriptPath]` | 探针 1a：`/s` 会剥掉最外层引号对，`%TEMP%` 含空格时 libuv 加的引号被剥掉 → `'C:\Users\John' 不是内部或外部命令`，exit 1。**这是一处会让部分用户必然踩到的真 bug** | 去掉 `/s`：`[cmdPath, '/d', '/q', '/c', scriptPath]`；并保留「脚本路径含 `%` 时退化为裸文件名 + 子进程 cwd」的分支 |
 | **D5** | 未处理 `%~dp0` 语义泄漏 | 探针 6：用户命令里的 `%~dp0` 解析为传输脚本所在目录，`%0` 为脚本全路径，`%1`/`%*` 为空 | 不静默改写用户文本；在工具描述与 `tool:cmd` 段落里明确写出「`%~dp0`/`%0`/`%1`/`%*` 无意义，请用 `%CD%`」 |
-| **D6** | 只 deny 了 `pwsh` | cmd 方言下若预设把 `tool-bash` 重新挂进 agent realm，`bash` 工具会与 `cmd` 并存（社区 `dsh-shell-select` 的 patch 头注释正是这个教训） | deny 列表按「可见性探测后取交集」构造：`['pwsh','bash']` 中只 deny `tools.get(name, agent) !== undefined` 的那些；`tool:pwsh` 与 `tool:bash` 两个段落都压空 |
+| **D6** | 只 deny 了 `pwsh` | cmd 方言下若预设在自己（共享）realm 里重新挂载 `tool-bash`，`bash` 工具会与 `cmd` 并存（社区 `dsh-shell-select` 的 patch 头注释正是这个教训） | deny 列表按「可见性探测后取交集」构造：`['pwsh','bash']` 中只 deny `tools.get(name, agent) !== undefined` 的那些；`tool:pwsh` 与 `tool:bash` 两个段落都压空 |
 | **D7** | 提示词段落 order 用 `getSectionOrder('TOOL_CMD')` | `PromptSectionOrderName` 无 `TOOL_CMD` 键，官方只有 `TOOL_BASH: 1000`、`TOOL_PWSH: 1010` | 用 `getSectionOrder('TOOL_PWSH') ?? 1010` 作为锚点；`tool:cmd` 落在 1010 |
 | **D8** | 「不合成 PATH」与既有 `extraPath` 配置语义冲突 | `src/config.ts:44` 的 `extraPath` 文档是「追加到 PATH 的目录」，bash 方言已实现 | cmd 也应用 `extraPath`（`composePath(extraPath, env.PATH)`），只是不追加 MSYS 目录 |
 | **D9** | 未说明输出解码由宿主固定为 UTF-8 | `dsh-subprocess-local/lib/output.js:232` `text: Buffer.concat(this.chunks).toString("utf8")` | 写进 §4.6：这决定了 `chcp 65001` 是唯一正确选择，`cmdCodePage` 只是逃生口 |
@@ -156,6 +156,15 @@ v1 写于改名前、且在两轮实测之前，有 15 处需要修正的地方�
 **关键教训**（引自 `dsh-shell-select` 的 patch 头注释）：
 
 > Disabling rows is not by itself enough for the tools: agent presets re-mount `tool-bash`/`tool-pwsh` inside each agent's realm, where no patch can address them. The plugin's global tool guard denies those two names wherever they are registered.
+
+> **复核（机制订正）**：上面引文里「inside each agent's realm」的表述不准确。preset 并非「每个 agent 一个 realm」，
+> 而是**每个 preset 声明一份共享的祖先 scope**——`@deepseek-ai/dsh-agent-preset-registry` 的 `mountPreset` 对每条
+> preset 声明调用一次 `createScope(owner, key)` 建一份 in-memory Loader 树，agent 只是 `bind`/`join` 到同一
+> generation（`dsh-agent-loop` 只 `createScope(loopCtx, this)` 把自己的 ctx 挂在该 agent 上）。因此 host 平面的
+> `disabled` 行确实够不到 preset 内的行，但**并非不可 patch**：可以按 id 覆盖 `preset-<name>.config.plugins` 整份
+> 目录，从而改掉内层 `tool-bash`/`tool-pwsh` 行；只是不能「按 id 定点删除」内层行（内层行是 `config.plugins`
+> 数组的一项，不是顶层 entry）。本插件选择工具级 `tools.restrict` 而非改 preset，是因为前者能按会话、按方言
+> 动态生效，不受静态 patch 限制。
 
 ⇒ 本插件继续走「按会话装配 + `tools.restrict`」路线，不新增静态 disable 行。
 
@@ -384,7 +393,7 @@ denial 判定只用 `matchesSignature(exitCode, stderr, confined.denialSignature
 
 客户端（`src/client/`）：
 
-- `row.tsx`：`dialectItems` 增加 `cmd`；`dialect === 'cmd'` 时渲染「cmd.exe 路径」输入 + 「沙箱策略」菜单，隐藏 bash 专属的「bash 路径」「登录 shell」「自动发现」「Python UTF-8」。
+- `row.tsx`：`dialectItems` 增加 `cmd`；`dialect === 'cmd'` 时渲染「cmd.exe 路径」（与 bash 同一套 `Input`/下拉，切换方言即自动扫描）、「控制台代码页」与「沙箱策略」菜单，隐藏 bash 专属的「登录 shell」「Python UTF-8」等。
 - `store.ts`：`setDialect` 允许 `'cmd'`；`normalize` 把未知值回落 `'pwsh'`。
 - `locales.ts`：新增 `row.dialect.cmd`、`row.cmdPath.label`、`row.cmdPath.hint`、`row.cmdConfinedPolicy.label`、`row.cmdConfinedPolicy.{escalate,unconfined}`。
 - `shared/protocol.ts`：`Dialect` 增加 `'cmd'`；`StateView` 增加 `cmdPath`。
@@ -1559,7 +1568,7 @@ P0 ──┬── P1 ──┐
 | R2b | 脚本内 `cd` 失败后命令在 scratch 目录执行 | 用户以为在工作区、实际在 `%TEMP%`，且可写 | 带守卫的 `cd`：失败即 `exit /b 1` 并写 stderr（§5.1、T-WD-GONE）。无守卫时实测 exit 0 静默执行，必须保留守卫 |
 | R3 | 受限令牌下 `chcp` 失效 | 非 ASCII 命令乱码 | T-SBX-ENC 实测；失效则文档化并建议 `unconfined`。**开工门槛**：M1 出口必须给出该结论，失败则把 `cmdConfinedPolicy` 默认值改为 `unconfined` |
 | R4 | 65001 下某些老程序崩溃 | 命令无法执行 | `cmdCodePage` 逃生口 + 加载警告 |
-| R5 | `tool-bash` 被预设重新挂进 agent realm | `bash` 与 `cmd` 并存 | deny 列表动态取可见集（D6）；T-CFG 覆盖 minimal 预设。**注意**：`tools.restrict` 只能隐藏**全局/继承**的工具，作用域内注册（`agentCtx` 自身层）的工具隐藏不掉——所以官方 `bash`/`pwsh` 能被 deny，但若某个预设在自己 realm 里注册同名工具，仍可能并存。结论写「已缓解」而非「已解决」 |
+| R5 | `tool-bash` 被预设重新挂进 preset 共享 realm | `bash` 与 `cmd` 并存 | deny 列表动态取可见集（D6）；T-CFG 覆盖 minimal 预设。**注意**：`tools.restrict` 只能隐藏**全局/继承**的工具，作用域内注册（`agentCtx` 自身层）的工具隐藏不掉——所以官方 `bash`/`pwsh` 能被 deny，但若某个预设在自己（共享）realm 里注册同名工具，仍可能并存。结论写「已缓解」而非「已解决」 |
 | R6 | 脚本残留堆积 | `%TEMP%` 膨胀 | `onProcessDone` 删 + 24h 清扫 + `ctx.effect` 删目录；准备阶段超时另由 `finally` 兜底（P1-6） |
 | R7 | 超时转后台后脚本被提前删 | 后台作业中途失败 | 只在 `onProcessDone` 删（D12）；`finally` 只在**未登记**时删 |
 | R8 | 新增 3 个 peerDependency | 宿主版本不匹配时加载失败 | 与现有 `dsh-*` 同版本 `0.2.1-rc.2`，`engines.dsh` 已限定范围 |

@@ -1,5 +1,5 @@
 import z from '@deepseek-ai/schemastery'
-import { SandboxUnavailableError, type SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { BashTerminalBackend } from '@deepseek-ai/dsh-terminal-bash'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
@@ -25,9 +25,7 @@ import { writeDiagnostic } from './diag.ts'
  *
  * - `planLaunch(...) === 'direct'` -> hand node-pty the original
  *   `[bashPath, ...shellArgs]`, dropping the confined wrapper;
- * - `'confine'` -> pass the spec through unchanged, keeping official behaviour;
- * - `'fail'` -> throw `SandboxUnavailableError`, the same error class the
- *   first-party bash tool uses for "cannot run under this sandbox".
+ * - `'confine'` -> pass the spec through unchanged, keeping official behaviour.
  */
 
 /** Backend type the preset rows point at (`config.backendType`). */
@@ -53,8 +51,8 @@ export const Config = z.object({
   pythonUtf8: z.boolean().default(true),
   /** Read the login profile (`-l`), matching the one-shot executor's flag. */
   loginShell: z.boolean().default(false),
-  /** Same three-value policy the one-shot executor uses. */
-  confinedPolicy: z.union(['unconfined', 'escalate', 'fail'] as const).default('unconfined'),
+  /** Same two-value policy the one-shot executor uses. */
+  confinedPolicy: z.union(['unconfined', 'escalate'] as const).default('unconfined'),
 })
 
 export type PtyConfig = {
@@ -155,10 +153,6 @@ export async function apply(ctx: Context, config: PtyConfig): Promise<void> {
         choice,
         platform: process.platform,
       })
-      if (plan.kind === 'fail') {
-        const mode = policy?.defaultMode
-        throw new SandboxUnavailableError(mode === 'read-only' ? 'read-only' : 'workspace-write', plan.reason)
-      }
       if (plan.kind === 'confine') return ctx.subprocess.spawnTerminal(spec)
       // `direct`: drop the confined wrapper and launch Git Bash directly, exactly
       // like the one-shot executor's direct branch.

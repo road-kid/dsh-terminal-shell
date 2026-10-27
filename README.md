@@ -58,7 +58,7 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的：
    ```
    四步都登记在 `agentCtx` 上，会话结束由 cordis 逆序释放；中途失败则逆序回滚，会话退化为原样。
 
-4. **配置与设置行**：所有字段 `.volatile()`，同一份 entry Config 由 Host 交给官方 `configForms` 服务；**客户端半区**（`lib/client.js`）把它渲染成 **设置 → 通用 → 终端工具** 的一行，写回仍落在 profile 的 patch 层。行内控件全部复用官方 `@deepseek-ai/dsh-client-ui-primitives` 的 `Button` / `Input` / `Menu` / `IconChevronDownOutlineRegular`，外观与相邻的官方设置项同源；该包只作为 devDependency 提供类型，运行时由 Web shell 的冻结模块表（`PLATFORM_MODULES`）播种，bundle 像 `require('react')` 一样 `require()` 它，插件不在运行时安装任何依赖。
+4. **配置与设置行**：所有字段 `.volatile()`，同一份 entry Config 由 Host 交给官方 `configForms` 服务；**客户端半区**（`lib/client.js`）把它渲染成 **设置 → 通用 → 终端 Shell** 的一行，写回仍落在 profile 的 patch 层。行内控件全部复用官方 `@deepseek-ai/dsh-client-ui-primitives` 的 `Input` / `Menu` / `IconChevronDownOutlineRegular`，外观与相邻的官方设置项同源；该包只作为 devDependency 提供类型，运行时由 Web shell 的冻结模块表（`PLATFORM_MODULES`）播种，bundle 像 `require('react')` 一样 `require()` 它，插件不在运行时安装任何依赖。
 
 ### 关键设计约束（为什么不那么做）
 
@@ -66,7 +66,7 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的：
 - **不编辑 preset**：`preset-standard` 在 profile 里是完整快照，改它等于接管用户的组合文件，且升级会被覆盖。极简模式的变体同理——它是**新增**一个注册项（`minimal-gitbash`），不是改官方 `minimal` 的定义。
 - **只对新会话生效**：工具与 prompt 是会话创建时装配的，运行中换不掉——这是 DSH 的语义，不是插件的取舍。
 - **`restrict` 只过滤继承层**：官方文档明确 "never what its OWN layer registers"，所以从 agent scope 调 `restrict({deny:['pwsh']})` 恰好只隐藏 preset 带进来的 `pwsh`，不影响本层注册的 `bash`；`cmd` 方言用 `restrict({deny:['pwsh','bash']})` 隐藏两个继承工具（先 `tools.get` 确认可见，隐藏不存在的名字会抛错），本层注册的 `cmd` 不受影响。
-- **沙箱策略是显式配置，不由插件悄悄绕过**：默认 `confinedPolicy: unconfined` 在 Windows 受限档位下直接启动 Git Bash，命令因此不受文件沙箱约束——这是用户在设置里看得到、可改回的选择；`escalate` 仍走官方 `ctx.sandbox.confine()` 与官方审批，`fail` 明确报错。插件只把 MSYS 启动失败分类成 `denied`，不自己实现审批。
+- **沙箱策略是显式配置，不由插件悄悄绕过**：默认 `confinedPolicy: unconfined` 在 Windows 受限档位下直接启动 Git Bash，命令因此不受文件沙箱约束——这是用户在设置里看得到、可改回的选择；`escalate` 仍走官方 `ctx.sandbox.confine()` 与官方审批。插件只把 MSYS 启动失败分类成 `denied`，不自己实现审批。
 
 ---
 
@@ -77,7 +77,7 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的：
 - Windows + DSH Desktop `>=0.2.1-rc.2 <0.3.0`（`package.json` 的 `engines.dsh` 范围；本插件在此范围内开发与验证）
 - **Web shell 自带 `@deepseek-ai/dsh-client-ui-primitives`**：0.2.1-rc.2 起该包由 Web shell 的冻结模块表（`PLATFORM_MODULES`）播种，插件设置行的 bundle 像 `require('react')` 一样 `require()` 它，不会内联第二份 atoms。宿主升级到范围外时设置行可能加载失败，但 Host 半区的替换逻辑不依赖这张模块表
 - 用 `bash` 方言：本机已装 Git for Windows（或 MSYS2 / Cygwin）
-- Windows 受限沙箱下 Git Bash 无法在沙箱内启动：默认 `confinedPolicy: unconfined` 直接启动（模型命令不受文件沙箱限制），也可选 `escalate`（官方审批）或 `fail`（报错），见「受限沙箱策略」
+- Windows 受限沙箱下 Git Bash 无法在沙箱内启动：默认 `confinedPolicy: unconfined` 直接启动（模型命令不受文件沙箱限制），也可选 `escalate`（官方审批），见「受限沙箱策略」
 - 用 `cmd` 方言：只需要系统自带的 `cmd.exe`（`%ComSpec%`），无需额外安装。`cmd` 能在受限沙箱下正常启动，所以 `cmdConfinedPolicy` 默认 `escalate`，见 [CMD 方言](#cmd-方言cmdexe)
 
 ### 步骤
@@ -110,26 +110,26 @@ npm pack
 
 ### 启用
 
-重启后打开 **设置 → 通用**，底部会多出一行 **终端工具**（客户端半区注册的 `settings.general.item` 行，id `terminal-shell`，order 60）：
+重启后打开 **设置 → 通用**，底部会多出一行 **终端 Shell**（客户端半边区注册的 `settings.general.item` 行，id `terminal-shell`，order 60）：
 
 ```
-终端工具                              [命令提示符（cmd） ▾]
-模型执行命令时使用的终端；改动只影响新会话。
-cmd.exe 路径                     [C:/WINDOWS/system32/cmd.exe]  [自动发现]
-控制台代码页                      [65001]
-受限沙箱时                        [先走官方沙箱（escalate） ▾]
+终端 Shell                                              [cmd ▾]
+选择智能体工具调用终端使用的 shell。改动后仅在新会话生效。
+cmd.exe 路径                              [C:/WINDOWS/system32/cmd.exe]
+沙箱策略                                            [申请权限 ▾]
+极简模式                                              [单次 cmd ▾]
+控制台代码页                                                [65001]
 ```
 
 （上面是选中 `cmd` 后的样子；默认 `pwsh` 时没有后续行。）
 
-- **版式与官方 General 段设置行一致**：两列，左侧标题（14px/20px）+ 一句说明（12px/18px），右侧控件；24px 列间距、16px 纵向内边距、`.5px` 底部分隔线（`--dsw-alias-border-l2`）。颜色全部取 `--dsw-alias-*` 设计变量，跟随主题。
-- **终端类型**是一枚官方下拉触发器（36px、`--dsw-radius-md`、`--dsw-alias-bg-module-platform`、chevron），点开是官方 `Menu`——与官方段里所有枚举型偏好的渲染方式相同。三项顺序为 `PowerShell（pwsh）` / `Git Bash（bash）` / `命令提示符（cmd）`。**默认 `pwsh`**：装插件本身不改变任何行为。
-- 选 `bash` 后才出现路径行。路径默认是官方 `Input`，直接填 `bash.exe` 的完整路径；「自动发现」命中多于一条时，输入框换成同一套下拉，列出全部可用路径。路径为空时有提示；扫描中按钮文案变为「正在扫描…」，扫不到会明确提示，而不是清空输入。
-- 选 `cmd` 后出现的是 **`cmd.exe` 路径**、**控制台代码页**、**受限沙箱时** 三行；`bash` 专属字段（`loginShell` / `extraPath` / `pythonUtf8` / `minimalMode` / bash 的 `confinedPolicy`）在该方言下隐藏。`cmd` 行始终带一条限制说明（一次性批处理、`%VAR%` 展开、`%~dp0` 指向内部脚本、回显不可恢复、非 ASCII 依赖代码页）。
-- 已经选好的路径**不会**被后续扫描改写（除非它已失效）。
-- `bash` 时路径行之后还有 **受限沙箱时** 下拉（`unconfined` / `escalate` / `fail`，默认 `unconfined`）；选中 `unconfined` 会显示提示：模型执行的命令不受文件沙箱限制。三种取值的后果见「受限沙箱策略」。
-- 再下一行是 **极简模式** 下拉（`leave` / `oneshot` / `variant`，默认 `oneshot`），只在方言为 `bash` 且平台受支持时出现，用于处理官方 `minimal` 预设的持久终端。选 `variant` 后行内会显示变体状态：已注册 / 注册失败（带原因）；关掉选项但仍有会话引用时，提示里会给出引用数。见[极简模式](#极简模式minimal-preset)。
-- **挂载时不扫描、不写配置**：扫描只在点「自动发现」时发生，并把选中的 `bashPath` 与可用列表 `bashCandidates` 原子写回；`/state` 只读配置，所以打开设置是瞬时的。运行中的会话保持启动时的终端类型——这是 DSH 的装配语义。
+- **版式与官方 General 段设置行一致**：左列标题（14px/22px）+ 每行一句说明（12px/18px），右侧控件；24px 列间距、16px 纵向内边距、`.5px` 底部分隔线（`--dsw-alias-border-l2`，仅整组最后一行去掉）。颜色全部取 `--dsw-alias-*` 设计变量，跟随主题。**每一行只有「标签 + 一句说明 + 控件」三件东西**，不再叠加提示段。
+- **终端类型**是一枚官方下拉触发器（36px、`--dsw-radius-md`、`--dsw-alias-bg-module-platform`、chevron），点开是官方 `Menu`——与官方段里所有枚举型偏好的渲染方式相同。三项就是程序名本身：`powershell` / `bash` / `cmd`。**默认 `pwsh`**：装插件本身不改变任何行为。
+- 选 `bash` 后才出现路径行。**选中即触发扫描**（没有独立的「自动发现」按钮）：路径默认是官方 `Input`，也可以直接填 `bash.exe` 的完整路径；扫描命中多于一条时，输入框换成同一套下拉，列出全部可用路径。路径为空时有提示；扫描中该位置显示「正在扫描…」，扫不到会明确提示，而不是清空输入。切换这一下正是最可能撞上竞态的时机（同一 revision 上还排着方言写入），所以写入被拒或扫描请求失败都会自动重试一次，不会再出现「第一次切换没找到、再切一次才有」。
+- `bash` 的后续两行：**沙箱策略**（`绕过沙箱` = `unconfined` / `申请权限` = `escalate`，默认前者；说明为「选择当 Windows 沙箱将命令降为低完整性，bash 启动受限时的行为模式」）与 **极简模式**（`保持 pwsh` = `leave` / `单次 bash` = `oneshot` / `添加新预设` = `variant`，默认 `oneshot`）。极简模式只在方言为 `bash` 且平台受支持时出现，用于处理官方 `minimal` 预设的持久终端；选 `variant` 后行内会显示变体状态（已注册 / 注册失败带原因；关掉选项但仍有会话引用时给出引用数）。见[极简模式](#极简模式minimal-preset)。
+- 选 `cmd` 后出现的是 **`cmd.exe` 路径**、**沙箱策略**、**极简模式**、**控制台代码页** 四行（顺序与 `bash` 一致：先是可执行文件，再是沙箱策略，然后方言相关的设置）；`bash` 专属字段（`loginShell` / `extraPath` / `pythonUtf8` / bash 的 `confinedPolicy`）在该方言下隐藏。**`cmd` 的极简模式只有两个选项**：`保持 pwsh` = `leave` / `单次 cmd` = `oneshot`（默认后者）——`cmd` 没有持久终端后端，所以不提供「添加新预设」（那是持久 bash 变体）。`cmd` 的沙箱行与 `bash` **复用同一套文案与选项**（`绕过沙箱` / `申请权限`，默认后者），两处方言不会各自漂移。`cmd.exe` 路径字段只接受 `cmd.exe`，填其它程序会被拒绝并提示；cmd 方言的其余限制（一次性批处理脚本、`%VAR%` 展开、回显无法关闭、`%~dp0` 指向内部脚本、非 ASCII 依赖代码页）见下文。
+- 已经选好的路径**不会**被后续扫描改写（除非它已失效）。两种沙箱取值的后果见「受限沙箱策略」。配置只有 `unconfined` / `escalate` 两种（0.2.0 起 `fail` 已从配置枚举移除，patch 里写它会被判非法），界面显示为 `绕过沙箱` / `申请权限`。
+- **挂载时不扫描、不写配置**：扫描只在用户把终端类型切到 `bash` 或 `cmd` 时发生，并把选中的路径（`bash` 另含可用列表 `bashCandidates`）原子写回；`/state` 只读配置，所以打开设置是瞬时的。运行中的会话保持启动时的终端类型——这是 DSH 的装配语义。
 - 能力或设置服务不可用时行内会说明原因（例如「当前 DSH 版本不支持自动切换：{reason}」）；配置只读时所有控件禁用。非 Windows 上整行不渲染。
 
 设置行通过两条 `/api` 路由（都不写配置；写入仍走 `configForms`，落 profile patch 层）：
@@ -137,25 +137,25 @@ cmd.exe 路径                     [C:/WINDOWS/system32/cmd.exe]  [自动发现]
 | 路由 | 作用 |
 |---|---|
 | `POST /api/dsh-terminal-shell/state` | 平台、设置可用性、当前值、能力探测。**不扫描**，所以打开设置是瞬时的 |
-| `POST /api/dsh-terminal-shell/discover` | 用户点「自动发现」时才调用，返回全部可用候选 |
+| `POST /api/dsh-terminal-shell/discover` | 用户把终端类型切到 `bash` / `cmd` 时调用（请求带 `dialect`），返回该方言的全部可用候选 |
 
-Config 字段（设置行直接编辑 `dialect`、`confinedPolicy` 与 `bashPath`；点「自动发现」会原子写回 `bashPath` + `bashCandidates`；其余字段仍可直接写 profile patch）：
+Config 字段（设置行直接编辑 `dialect`、`confinedPolicy`、`bashPath` 与 `cmdPath`；切换方言发现路径时会原子写回 `bashPath` + `bashCandidates`（`cmd` 只写 `cmdPath`）；其余字段仍可直接写 profile patch）：
 
 | 字段 | 说明 |
 |---|---|
 | `dialect` | `pwsh`（默认，行为不变）/ `bash` / `cmd` |
 | `bashPath` | 显式 bash.exe 绝对路径；留空 = 自动发现 |
-| `bashCandidates` | 上一次「自动发现」的可用路径（也接受手填的安装根目录） |
+| `bashCandidates` | 上一次发现扫描的可用路径（也接受手填的安装根目录） |
 | `autoDiscover` | 会话装配时 `bashPath` 为空是否自动发现 |
 | `discoverTimeoutMs` | 一次发现的上限（只 stat 文件，不 spawn） |
 | `loginShell` | 传 `-l`，读取登录 profile |
 | `extraPath` | 追加到子进程 PATH 的目录 |
 | `pythonUtf8` | 导出 `PYTHONIOENCODING=utf-8` |
-| `confinedPolicy` | Windows 受限档位下的处理方式：`unconfined`（默认，直接启动，不经文件沙箱）/ `escalate`（先走官方沙箱；首次失败返回官方 denial 提示，模型带 `sandbox_permissions` 重试并审批）/ `fail`（抛 `SandboxUnavailableError`，提示改配置） |
+| `confinedPolicy` | Windows 受限档位下的处理方式：`unconfined`（默认，直接启动，不经文件沙箱）/ `escalate`（先走官方沙箱；首次失败返回官方 denial 提示，模型带 `sandbox_permissions` 重试并审批）|
 | `minimalMode` | 官方 `minimal` 预设的处理方式：`leave`（保留官方持久终端）/ `oneshot`（默认，旧行为，换成一次性 `bash`）/ `variant`（另注册持久 Git Bash 预设 `minimal-gitbash`）。只影响 `minimal` 会话 |
-| `cmdPath` | 显式 `cmd.exe` 绝对路径；留空 = `%ComSpec%` → `%SystemRoot%\System32\cmd.exe` |
+| `cmdPath` | 显式 `cmd.exe` 绝对路径（**只接受 `cmd.exe`**，填其它程序会被忽略并在行内提示）；留空 = `%ComSpec%` → `%SystemRoot%\System32\cmd.exe` |
 | `cmdCodePage` | 脚本里 `chcp` 的代码页，默认 `65001`（UTF-8）。改成别的值只影响 `cmd` 会话内的控制台代码页 |
-| `cmdConfinedPolicy` | `cmd` 方言在受限档位下的处理方式：`escalate`（默认，走官方沙箱）/ `unconfined`（直接启动）。**没有 `fail`** |
+| `cmdConfinedPolicy` | `cmd` 方言在受限档位下的处理方式：`escalate`（默认，走官方沙箱）/ `unconfined`（直接启动）。**没有「拒绝执行」档** |
 | `timeoutMs` / `maxTimeoutMs` / `maxOutputBytes` / `maxSpillBytes` / `graceMs` | 继承自官方 bash 执行器的同名字段 |
 
 把 `dialect` 改成 `bash`，**新建会话**即可看到工具目录里是 `bash` 而不再是 `pwsh`。已开的会话不受影响。
@@ -181,7 +181,7 @@ Config 字段（设置行直接编辑 `dialect`、`confinedPolicy` 与 `bashPath
 
 ### cmd.exe（`cmd` 方言）
 
-`cmdPath` 为空时：`cmdPath` → `%ComSpec%`（也认 `COMSPEC`）→ `%SystemRoot%\System32\cmd.exe`（也认 `SYSTEMROOT` / `windir`）。**不扫描磁盘**——`cmd.exe` 没有第二个合理位置。三步全部落空时该会话跳过替换（`reason=cmd-not-found`），保留官方 `pwsh` 工具。
+`cmdPath` 为空时：`cmdPath` → `%ComSpec%`（也认 `COMSPEC`）→ `%SystemRoot%\System32\cmd.exe`（也认 `SYSTEMROOT` / `windir`）。**不扫描磁盘**——`cmd.exe` 没有第二个合理位置。非 `cmd.exe` 的 `cmdPath` 视为未设置（这样被写错的配置不会把 bash 当成 cmd 启动）。三步全部落空时该会话跳过替换（`reason=cmd-not-found`），保留官方 `pwsh` 工具。
 
 ---
 
@@ -208,13 +208,12 @@ exit -1073741502
 |---|---|---|
 | `unconfined`（默认） | 直接以普通权限启动 Git Bash，不调用 `ctx.sandbox.confine()` | 一次调用即成功；模型执行的命令**不受文件沙箱限制** |
 | `escalate` | 先按官方方式进入沙箱；MSYS 启动失败被标为 `denied`，模型收到官方升级提示后带 `sandbox_permissions: danger-full-access` 重试，由宿主审批 | 首次失败 + 一次审批往返 |
-| `fail` | 抛 `SandboxUnavailableError`，错误信息提示把 `confinedPolicy` 改成 `unconfined`，或带 `sandbox_permissions: danger-full-access` 重试 | 明确报错，不自动重试 |
 
 **结果事实**：`unconfined` 直启时结果把 `sandbox.mode` 报成 `danger-full-access`——这是这次调用**实际**的边界，因为没有任何后端包住子进程；`sandbox.enforcement` 不填（官方枚举描述的是"有活动后端时能保证多少"，此时没有后端可描述）。`escalate` 走 `confine()`，`mode` / `enforcement` 保持官方原值。
 
-**工具声明**：`unconfined` 下执行器不再向 `tool-bash` 声明受限档位（`sandboxMode` 返回 `undefined`），所以模型不会被告知"命令在沙箱内运行"，也不会看到用不上的 `sandbox_permissions`。`escalate` / `fail` 与其它平台仍按官方方式声明。
+**工具声明**：`unconfined` 下执行器不再向 `tool-bash` 声明受限档位（`sandboxMode` 返回 `undefined`），所以模型不会被告知"命令在沙箱内运行"，也不会看到用不上的 `sandbox_permissions`。`escalate` 与其它平台仍按官方方式声明。
 
-**安全含义**：`unconfined` 是默认值是显式的产品选择——Windows 受限档位下不这样就没有可用的 Git Bash；它意味着模型通过 `bash` 执行的命令不受文件沙箱约束。需要沙箱约束时选 `escalate`（官方审批）或 `fail`（拒绝执行）。设置行在选中 `unconfined` 时会显示同样的提示。
+**安全含义**：`unconfined` 是默认值是显式的产品选择——Windows 受限档位下不这样就没有可用的 Git Bash；它意味着模型通过 `bash` 执行的命令不受文件沙箱约束。需要沙箱约束时选 `escalate`（官方审批）。设置行把两者呈现为 `绕过沙箱` / `申请权限`。
 
 `escalate` 的审批完全由第一方 `dsh-tool-bash` 负责：`approveEscalation` 在 `execute` 之前调用，批准后以 `danger-full-access` 的 `sandboxPolicy` 进入执行器。插件只把 MSYS 启动失败分类成 `denied`，不自己实现审批，也不修改宿主的沙箱实现。判定同时看退出码（`3221225794` / `3221225506`）与 stderr 签名（`ntcreatedirectoryobject(\basenamedobjects\msys-` / `couldn't create signal pipe`），前台与后台一致。
 
@@ -267,7 +266,7 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 | `escalate`（默认） | 受限档位下走官方 `ctx.sandbox.confine()`，命令真的被文件沙箱约束；`danger-full-access` 或没有沙箱时直接启动 |
 | `unconfined` | 一律直接启动，命令**不受**文件沙箱约束 |
 
-**没有 `fail` 档**：`cmd` 不存在「受限下起不来」这种情况，`fail` 只会变成一个没有意义的拒绝。
+**没有 `fail` 档**：`cmd` 不存在「受限下起不来」这种情况；0.2.0 起 `confinedPolicy` 也移除了该成员，两种方言的沙箱策略都只有 `绕过沙箱` / `申请权限`。
 
 **已知判定缺口**：`sandbox.denied` 依赖 provider 的 stderr 签名。中文 Windows 上 `cmd` 的拒绝信息是 GBK 中文，英文签名 `is not recognized as an internal or external command` 永不命中——此时**沙箱仍然生效**（命令确实被拦了），只是结果里的 `denied` 标记可能为 `false`。插件不伪造这个判定。
 
@@ -304,7 +303,7 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 
 新建会话时打开预设选择器，选「极简模式 · Git Bash」（`minimal-gitbash`）。名册是界面挂载时拉的，如果选择器是注册前就打开的，重开一次即可看到。已开的会话不会被重新组装：替换发生在会话创建时，改选项或改预设都只影响之后新建的会话。
 
-持久后端没有 `sandbox_permissions` 升级通道，所以 `escalate` 在这条路上无法完成升级：`unconfined`（默认）直接启动 Git Bash；`escalate` 仍会走官方受限路径并撞上 MSYS 启动失败，但没有可用的重试入口；`fail` 直接抛 `SandboxUnavailableError`。另外，官方 `ensureSandboxModeFence` 禁止在持久终端打开期间切换沙箱档位，这算一条限制，见「已知限制」。
+持久后端没有 `sandbox_permissions` 升级通道，所以 `escalate` 在这条路上无法完成升级：`unconfined`（默认）直接启动 Git Bash；`escalate` 仍会走官方受限路径并撞上 MSYS 启动失败，但没有可用的重试入口。另外，官方 `ensureSandboxModeFence` 禁止在持久终端打开期间切换沙箱档位，这算一条限制，见「已知限制」。
 
 设计依据、三个选项的取舍与风险分析见 [`docs/PLAN-minimal-mode.md`](docs/PLAN-minimal-mode.md)。
 
@@ -383,7 +382,7 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
    bash.exe: *** fatal error - NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…): 0xC0000022
    exit -1073741502
    ```
-   **这是宿主沙箱行为，与插件无关**，插件不修改它。默认 `confinedPolicy: unconfined` 会直接启动 Git Bash，代价是模型命令不受文件沙箱限制；改选 `escalate` 则走官方审批，改选 `fail` 则直接报错。详见「受限沙箱策略」。
+   **这是宿主沙箱行为，与插件无关**，插件不修改它。默认 `confinedPolicy: unconfined` 会直接启动 Git Bash，代价是模型命令不受文件沙箱限制；改选 `escalate` 则走官方审批。详见「受限沙箱策略」。
 4. **原生 Windows 程序输出可能乱码**。`cmd`/`tasklist`/`powershell` 按 ANSI 代码页（中文系统为 936）写管道，DSH 按 UTF-8 解码 → 中文乱码；`chcp 65001` 无效。仅 Python 可用 `PYTHONIOENCODING` 缓解（默认已开）。
 5. **`cmd /c` 会被 MSYS 参数改写**，需写 `cmd //c` 或设 `MSYS2_ARG_CONV_EXCL='*'`。
 6. **首次安装必须重启 DSH**（理由见「安装」）。
@@ -422,7 +421,7 @@ src/diag.ts       诊断日志
 src/types.ts      共享类型
 src/shared/protocol.ts  Host/客户端共享的线路协议（路由路径、常量、视图类型）
 src/routes.ts      两条 /api 路由：/state 与 /discover（都不写配置）
-src/client/        客户端半区：设置 → 通用 的「终端工具」行
+src/client/        客户端半区：设置 → 通用 的「终端 Shell」行
                   index.ts 注册 settings.general.item；row.tsx 是行组件（官方 UI atoms）；
                   store.ts 是状态机（自动发现、写回、错误）；api.ts 取数；styles.ts 只放版式
 src/testing.ts     仅测试用的第二入口（不发布）
@@ -433,13 +432,13 @@ npm run typecheck     # tsc --noEmit（devDeps 钉 0.2.1-rc.2 真 .d.ts，含官
 npm run build         # esbuild → lib/index.js（Host ESM）+ lib/client.js（客户端半区）+ lib/pty.js（持久终端入口）；react、官方 UI atoms 与 dsh-terminal-bash 均保持 external
 npm run contractcheck # Config 全 volatile / patch 行 / 导出面 / 客户端半区装载形状 / bundle 未内联第一方 / atom specifier 保持 external（19 项）
 npm run clientsmoke   # 真实执行 lib/client.js：模块装载形状、react 与 atom external、apply 注册行、无 configForms 时降级、迟到服务替换、HMR 幂等（8 项）
-npm run rowselftest   # 行状态机 15 项：/state 读取、乐观写入、自动发现持久化、各类失败提示
-npm run rendertest    # 在 jsdom 里真实渲染并点击：按 role/aria 断言下拉触发器、菜单项与路径 Input（18 项，含 cmd 三行；官方 atoms 由 scripts/primitives-double.mjs 顶替）
+npm run rowselftest   # 行状态机 19 项：/state 读取、乐观写入、切方言即扫描与重试、各类失败提示
+npm run rendertest    # 在 jsdom 里真实渲染并点击：按 role/aria 断言下拉触发器、菜单项与路径 Input（21 项，含 cmd 四行与 cmd 极简模式两项；官方 atoms 由 scripts/primitives-double.mjs 顶替）
 npm run selftest      # 路径、发现、快照、受限启动决策、/api 路由注册、预设行克隆与变体生命周期 51 项
-npm run cmdunit       # cmd 单元测试：脚本模板、发现、启动判定，含真 spawn cmd.exe（30 断言）
+npm run cmdunit       # cmd 单元测试：脚本模板、发现、启动判定，含真 spawn cmd.exe（37 断言）
 npm run integration   # 在真实第一方服务上跑完整替换流程（13 项）
 npm run cmdtest       # cmd 端到端矩阵：传输、引号、变量、多行、编码、退出码、cwd、超时、沙箱、装配
-npm run ptytests      # 在真实 ConPTY 上跑持久 Git Bash：注册、跨命令保持状态、fail/escalate 拒绝（4 项，非 Windows 跳过）
+npm run ptytests      # 在真实 ConPTY 上跑持久 Git Bash：注册、跨命令保持状态、escalate 拒绝（3 项，非 Windows 跳过）
 npm run check         # typecheck → build → contractcheck → clientsmoke → selftest → rowselftest → rendertest → cmdunit → integration → cmdtest → ptytests
 ```
 

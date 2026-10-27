@@ -265,7 +265,7 @@ export async function installSession(
  *    section — and the blanked `tool:pwsh` one — into every session.
  * 2. It denies *both* inherited shell tools, but only the ones actually visible:
  *    `restrict` rejects unknown names, and a preset may have re-mounted
- *    `tool-bash` inside this agent's realm even on Windows.
+ *    `tool-bash` inside the preset's shared scope even on Windows.
  * 3. The `tool:cmd` section is registered here and nowhere else. `NamedEntries`
  *    throws on a duplicate name in one scope, so `ToolCmd.apply()` must not also
  *    register it.

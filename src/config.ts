@@ -70,9 +70,8 @@ export const Config = z.object({
    *   tool offer `sandbox_permissions` and lets the model retry with
    *   `danger-full-access` through the official approval flow. The approval
    *   itself belongs to that flow — the plugin never approves anything.
-   * - `fail`: report a sandbox error instead of running anything.
    */
-  confinedPolicy: z.union(['unconfined', 'escalate', 'fail'] as const).default('unconfined').volatile(),
+  confinedPolicy: z.union(['unconfined', 'escalate'] as const).default('unconfined').volatile(),
 
   /**
    * Explicit `cmd.exe`. Empty means "resolve it": `ComSpec`, then
@@ -218,8 +217,7 @@ function readMinimalMode(value: unknown): MinimalMode {
 
 function readConfinedPolicy(value: unknown): ConfinedPolicy {
   const resolved = read<string>(value, 'unconfined')
-  if (resolved === 'escalate' || resolved === 'fail') return resolved
-  return 'unconfined'
+  return resolved === 'escalate' ? 'escalate' : 'unconfined'
 }
 
 /**

@@ -35,6 +35,68 @@ to translate them. The first version actually published under the new numbering 
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Changed
+
+- **The settings row was rebuilt against the official General-row design.** The row is
+  now titled 「终端 Shell」 and every line follows one convention: a 14/22 label, at most
+  one sentence of description, then the control. Dialects are labelled with the program
+  names `powershell` / `bash` / `cmd`; the sandbox row is 「沙箱策略」 with the options
+  「绕过沙箱」 / 「申请权限」; the minimal row is 「极简模式」 with 「保持 pwsh」 /
+  「单次 bash」 / 「添加新预设」 (`leave` / `oneshot` / `variant`). Borders moved from one
+  per-group rule to one per row (last row borderless), matching the official sections.
+- **Discovery is a consequence of choosing a shell, not a separate action.** The
+  「自动发现」 button is gone; selecting `bash` or `cmd` in the dialect menu scans for
+  that program and turns the path control into a dropdown when more than one candidate
+  exists. The path row no longer shares its width with the text column, so a full
+  `C:\Program Files\Git\bin\bash.exe` is visible instead of being clipped.
+- **`cmd` gains the minimal-mode row.** A cmd session shows 路径 → 沙箱策略 → 极简模式 →
+  控制台代码页, in the same order and with the same wording as the bash rows. The cmd
+  minimal row offers 「保持 pwsh」 / 「单次 cmd」 only: `cmd` has no persistent backend, so
+  the persistent-bash variant is meaningless there, while `leave` and `oneshot` both
+  still mean something (`installCmdSession` hides `pwsh`/`bash` and mounts a one-shot
+  `cmd`).
+- The dialect gate also covers the minimal preset: a `minimal` session that chose
+  `oneshot` under `cmd` gets the one-shot cmd tool instead of a persistent PowerShell.
+- The console-code-page description now says it follows the Harness decoding: the value
+  is applied with `chcp` before the command runs, and the default stays `65001`
+  (UTF-8) because the harness always decodes child output as UTF-8.
+
+### Removed
+
+- **`confinedPolicy: 'fail'` is gone from the configuration schema, and
+  `cmdConfinedPolicy` never had it.** Only `unconfined` and `escalate` remain, because
+  the third value could not do anything a confined launch does not already do: the
+  sandbox-denial path is what surfaces `sandbox_permissions` to the model. The
+  `LaunchPlan` `{kind: 'fail'}` member and every dead branch behind it were deleted
+  from `src/confined.ts`, `src/executor.ts` and `src/pty.ts`. This is a **breaking
+  configuration change**: a profile that still stores `fail` now fails schema
+  validation, so the patch must be edited to `unconfined` or `escalate`.
+- The inline 「不受文件沙箱限制」 warning row and the cmd 「cmd 的限制」 hint paragraph.
+  Those consequences live in the README and the tool prompt instead of inside the row.
+
+### Fixed
+
+- **The first switch to `cmd` could come up with no path.** `setDialect` only started
+  discovery after the dialect write was accepted, so one revision-conflicted write left
+  the row empty until the user switched again. The dialect write and the discovery call
+  now each retry once (120 ms apart) and discovery runs even when the save is refused;
+  `syncSettings` no longer lets an empty snapshot overwrite an in-flight optimistic
+  value.
+- **`cmdPath` accepted any existing file.** A bash path stored as `cmdPath` was
+  rendered and would have been launched as `cmd`. `src/cmd/discover.ts` now exposes
+  `isCmdExecutable()`, so a non-`cmd.exe` configured path is invalid: it is not
+  discovered, the client refuses to save one (`row.cmdPath.invalid`), and a corrupted
+  stored value is shown as empty.
+
+### Docs
+
+- README, `docs/DESIGN.md`, `CHANGELOG.md` and the locale metadata were rewritten
+  around the shipped implementation; the historical `docs/PLAN-*.md` records keep their
+  original wording with a short "later change" note where the row copy moved on.
+
+
 ## [0.2.0]
 
 ### Added
