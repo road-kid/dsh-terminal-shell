@@ -1,24 +1,32 @@
 # dsh-terminal-shell
 
-在 Windows 上选择模型的终端工具背后用哪个 shell：**PowerShell**（`pwsh`）、**本机 Git Bash**（`bash`），或 **`cmd.exe`**（`cmd`）。
+On Windows, choose which shell sits behind the terminal tool the agent invokes: **PowerShell** (`pwsh`), the **local Git Bash** (`bash`), or **`cmd.exe`** (`cmd`).
 
-设计取向：**一个开关、所有 preset 跟随、不动 preset 文件、不接管全局 `ctx.shell`**。默认 `dialect: 'pwsh'`，装上去什么都不变；改成 `bash` 或 `cmd` 后，**新会话**拿到对应的工具，其它 shell 工具从该会话的工具目录里消失，已开的会话保持原状。所有配置字段都是 `volatile` 的，只在会话创建时取一次快照——这也是「改动后仅在新会话生效」的来源。
+## What this is
+Every DSH platform ships exactly one terminal tool; on Windows that tool is PowerShell. This plugin adds a settings switch: pick bash or cmd, and every new session's tool catalog then contains that shell's tool while the other shell's tool disappears. Sessions already open stay as they are. Installing it changes nothing: the default `dialect: 'pwsh'` matches official behavior exactly.
 
-| 项 | 值 |
+Who needs it:
+
+- You want a POSIX toolchain (git / ls / grep / sed / make / gcc) in front of the model — call `bash`;
+- You want the system's own batch semantics on Windows — call `cmd`;
+
+Design stance: **one switch, every preset follows, no preset file touched, the global `ctx.shell` never taken over**. Default `dialect: 'pwsh'`, so installing changes nothing; switch to `bash` or `cmd` and **new sessions** get the matching tool while the other shell tools vanish from that session's tool catalog — open sessions keep their original state. All config fields are `volatile` and snapshotted once at session creation — that is where "changes apply to new sessions only" comes from.
+
+| Item | Value |
 |---|---|
-| 版本 | `0.2.1` |
-| 适用平台 | Windows（DSH Desktop / Web shell） |
+| Version | `0.2.1` |
+| Platform | Windows (DSH Desktop / Web shell) |
 | `engines.node` | `>=22` |
 | `engines.dsh` | `>=0.2.1-rc.2 <0.3.0` |
-| 许可 | MIT |
+| License | MIT |
 
-> **临时替代方案**：DSH 目前没有内置的「终端 / shell 选择」能力。**在官方能力落地前，本插件是它的临时替代方案**——用官方已发布的执行器与工具，把 Windows 上新会话的终端换掉；Windows 受限沙箱档位下的 `confinedPolicy` 同属这段临时接线。**官方提供等价设置后即可停用本插件**：从 profile 依赖里移除本行并重启，新会话即回到官方终端工具。插件不改 DSH 安装目录、不改任何 preset、不接管全局 `ctx.shell`，配置只写进当前 profile 的 patch 层；卸载不需要清理任何全局状态。`minimalMode: variant` 是这条界线上的例外，但不是对它的破坏：持久终端版本以**新增预设** `minimal-gitbash` 的形式注册，官方 `minimal` 预设原样保留；没有会话再引用它时，这个预设会自行消失。详见下文「极简模式」一节。
+> **Stopgap**: DSH has no built-in "terminal / shell selection" capability today. **Until the official capability lands, this plugin is its stopgap** — using the officially shipped executors and tools to swap the terminal of new Windows sessions; the `confinedPolicy` under the restricted sandbox tier is part of the same temporary wiring. **Once the official equivalent exists, this plugin can be disabled**: remove this row from the profile dependencies and restart, and new sessions return to the official terminal tool. The plugin does not modify the DSH install directory, does not modify any preset, and does not take over the global `ctx.shell`; its configuration is written only into the current profile's patch layer, so uninstalling needs no global cleanup. `minimalMode: variant` is an exception on this boundary but not a violation of it: the persistent-terminal edition is registered as a **new preset** `minimal-gitbash`, while the official `minimal` preset stays untouched; when no session references it any more, that preset vanishes on its own. See "Minimal mode" below.
 
 ---
 
-## 为什么要这个插件
+## Why this plugin
 
-DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的——bash 家族被 `!!js` 平台断言关掉：
+DSH 0.2.1-rc.2's platform matrix is mutually exclusive on Windows — the bash family is switched off by `!!js` platform assertions:
 
 ```yaml
 - id: bash-sandbox
@@ -27,82 +35,82 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的——bash 家族被 `!
 - id: pwsh-sandbox
   name: '@deepseek-ai/dsh-pwsh-sandbox'
   disabled: !!js process.platform !== 'win32'
-- id: tool-bash          # 同样的平台断言
+- id: tool-bash          # the same platform assertion
 - id: tool-pwsh
 ```
 
-同时 `ctx.shell` 是**单实例服务**（同一个 context 内加载第二个会抛 `service "shell" has been registered`），所以 Windows 上根本没有 bash 执行器，`bash` 工具也不存在。想用 Git Bash 只有三条路：
+At the same time `ctx.shell` is a **single-instance service** (loading a second one in the same context throws `service "shell" has been registered`), so on Windows there is simply no bash executor and no `bash` tool. There are only three routes to Git Bash:
 
-| 路线 | 代价 |
+| Route | Cost |
 |---|---|
-| 改 `dsh-base` / profile patch 的平台断言 | 要动第一方组合，重启，且只影响那一个平面 |
-| 自研 PTY / 自研工具 | 重写 60KB+ 的工具契约，容易与官方行为漂移 |
-| **本插件：会话级隔离替换** | 只在新会话的 `isolate('shell')` 子树里注入执行器，宿主平面不动 |
+| Change the platform assertion in `dsh-base` / the profile patch | Touch first-party composition, restart, and it only affects that one plane |
+| Write your own PTY / your own tool | Rewrite a 60KB+ tool contract, easy to drift from official behavior |
+| **This plugin: per-session isolated replacement** | Inject the executor only into a new session's `isolate('shell')` subtree, leaving the host plane untouched |
 
-本插件选第三条：不抢全局 `ctx.shell`，只在**每一个新会话**自己的局部 realm 里装配。
+This plugin takes the third route: it does not seize the global `ctx.shell`; it composes inside each **new session's** own local realm.
 
 ---
 
-## 能力概览
+## Capabilities at a glance
 
-三种方言共用同一套设置行与配置，差别只在于工具、执行器与传输方式：
+All three dialects share one settings row and one config; only the tool, the executor and the transport differ:
 
-| 方言 | 工具名 | 执行器 | 传输 | 适用场景 |
+| Dialect | Tool name | Executor | Transport | When to use |
 |---|---|---|---|---|
-| `pwsh`（默认） | `pwsh`（官方，原样保留） | 平台自带的 pwsh 执行器 | 原生 | 装插件但不想改变任何行为 |
-| `bash` | `bash`（官方 `@deepseek-ai/dsh-tool-bash`） | `GitBashExecutor extends LocalBashExecutor` | `[bash.exe, -c, <command>]`，用配置的绝对路径 | 需要 POSIX 工具链（git / ls / grep / sed / make / gcc…） |
-| `cmd` | `cmd`（自研 `src/cmd/tool.ts`，官方 `dsh-tool-bash` 的逐字移植） | `CmdExecutor extends LocalBashExecutor` | 每次写临时 `.cmd` 脚本，`cmd.exe /d /q /c <脚本裸名>` | 只需要系统自带的 `cmd.exe`，没装 Git Bash |
+| `pwsh` (default) | `pwsh` (official, kept as-is) | the platform's own pwsh executor | native | install the plugin but change no behavior |
+| `bash` | `bash` (official `@deepseek-ai/dsh-tool-bash`) | `GitBashExecutor extends LocalBashExecutor` | `[bash.exe, -c, <command>]`, using the configured absolute path | when you need a POSIX toolchain (git / ls / grep / sed / make / gcc…) |
+| `cmd` | `cmd` (own `src/cmd/tool.ts`, a verbatim port of the official `dsh-tool-bash`) | `CmdExecutor extends LocalBashExecutor` | writes a temporary `.cmd` script per call, `cmd.exe /d /q /c <bare script name>` | when you only have the system's `cmd.exe` and no Git Bash |
 
-- `bash` / `cmd` 都会把被替换会话里的 `pwsh` 从工具目录隐藏（`cmd` 连继承来的 `bash` 也隐藏），并压空对应的 `tool:pwsh` 提示词段。
-- 超时、输出收集与溢出、abort 分类、后台作业、`sandbox_permissions` 升级、会话 cwd、工具卡片、退出码标记全部继承或复用官方实现。
-- `bash` 复用官方 `@deepseek-ai/dsh-tool-bash`；`cmd` 因为官方工具名与执行器都绑死在 `bash`/`pwsh` 上，用逐字移植的独立实现（见 [CMD 方言的限制](#cmd-方言的限制)）。
+- Both `bash` / `cmd` hide `pwsh` from the replaced session's tool catalog (`cmd` also hides the inherited `bash`), and blank out the matching `tool:pwsh` prompt section.
+- Timeouts, output collection and spill, abort classification, background jobs, `sandbox_permissions` escalation, session cwd, tool cards and exit-code markers are all inherited from or reuse the official implementation.
+- `bash` reuses the official `@deepseek-ai/dsh-tool-bash`; because the official tool name and executor are both hard-wired to `bash`/`pwsh`, `cmd` uses a verbatim-ported standalone implementation (see [cmd dialect limitations](#cmd-dialect-limitations)).
 
-### 工作原理：会话级隔离替换
+### How it works: per-session isolated replacement
 
-插件本身不实现终端，只在 `agent/created` 时对一个新会话做四件事（全部复用第一方组件；`cmd` 是唯一例外，见上表）：
+The plugin implements no terminal itself; on `agent/created` it does four things to a new session (all reusing first-party components; `cmd` is the only exception, see the table above):
 
 ```
-shellCtx = agentCtx.isolate('shell')                // 该 agent 私有的 shell realm
-shellCtx.plugin(GitBashExecutor, {...})             // 只在这个子树里可见
-shellCtx.plugin(ToolBash, {...})                    // 注册出的 bash 落在 agent 自己的工具层
-agentCtx.tools.restrict({ deny: ['pwsh'] })         // 只过滤「继承来的」工具
-agentCtx.systemPrompt.section({ name: 'tool:pwsh', text: '' })  // 空文本=渲染时丢弃
+shellCtx = agentCtx.isolate('shell')                // this agent's private shell realm
+shellCtx.plugin(GitBashExecutor, {...})             // visible only in this subtree
+shellCtx.plugin(ToolBash, {...})                    // the registered bash lands in the agent's own tool layer
+agentCtx.tools.restrict({ deny: ['pwsh'] })         // filters only INHERITED tools
+agentCtx.systemPrompt.section({ name: 'tool:pwsh', text: '' })  // empty text = dropped at render
 ```
 
-- **不接管全局 `ctx.shell`**：全局替换会让所有会话（含没选 bash / cmd 的）跟着变，并与宿主平台的执行器冲突。
-- **`restrict` 只过滤继承层**：官方语义是 "never what its OWN layer registers"，所以从 agent scope 调 `restrict({deny:['pwsh']})` 恰好只隐藏 preset 带进来的 `pwsh`，不影响本层注册的 `bash`；`cmd` 方言用 `restrict({deny:['pwsh','bash']})` 隐藏两个继承工具（先 `tools.get` 确认可见，隐藏不存在的名字会抛错）。
-- 四步都登记在 `agentCtx` 上，会话结束由 cordis 逆序释放；中途失败则逆序回滚，会话退化为原样。
-- **只对新会话生效**：工具与 prompt 是会话创建时装配的，运行中换不掉——这是 DSH 的语义，不是插件的取舍。
+- **Never takes over the global `ctx.shell`**: a global replacement would change every session (including those that did not pick bash / cmd) and would collide with the host platform's executor.
+- **`restrict` filters only the inherited layer**: the official semantics are "never what its OWN layer registers", so calling `restrict({deny:['pwsh']})` from the agent scope hides exactly the `pwsh` the preset brought in and does not touch the `bash` this layer registered; the `cmd` dialect calls `restrict({deny:['pwsh','bash']})` to hide both inherited tools (it first checks visibility with `tools.get`, since hiding a name that does not exist throws).
+- All four steps are registered on `agentCtx` and released in reverse order by cordis when the session ends; a mid-way failure rolls back in reverse and the session degrades to its original state.
+- **New sessions only**: tools and prompts are assembled at session creation and cannot be swapped at runtime — that is DSH's semantics, not a choice of this plugin.
 
 ---
 
-## 安装 / 启用
+## Install / enable
 
-### 前置条件
+### Prerequisites
 
-- **Windows 平台**：`cordis.patch.yml` 的 `disabled: !!js process.platform !== 'win32'`，非 Windows 上整行不加载。
-- DSH Desktop `>=0.2.1-rc.2 <0.3.0`（`package.json` 的 `engines.dsh`）。
-- 用 `bash` 方言：本机已装 Git for Windows（或 MSYS2 / Cygwin）。
-- 用 `cmd` 方言：只需要系统自带的 `cmd.exe`（`%ComSpec%`），无需额外安装。
+- **Windows platform**: the `cordis.patch.yml` row carries `disabled: !!js process.platform !== 'win32'`, so it is not loaded at all on other platforms.
+- DSH Desktop `>=0.2.1-rc.2 <0.3.0` (`engines.dsh` in `package.json`).
+- For the `bash` dialect: Git for Windows (or MSYS2 / Cygwin) installed locally.
+- For the `cmd` dialect: only the system's own `cmd.exe` (`%ComSpec%`), nothing extra to install.
 
-### 步骤
+### Steps
 
 ```powershell
-# 1. 构建（产物在 lib/）
+# 1. Build (artifacts land in lib/)
 git clone https://github.com/road-kid/dsh-terminal-shell.git
 cd dsh-terminal-shell
 npm install
 npm run check        # typecheck → build → contractcheck → clientsmoke → selftest → rowselftest → rendertest → cmdunit → integration → cmdtest → ptytests
 
-# 2. 装进 profile（本机 profile 为 desktop）
-#    用插件管理器从本地目录安装：
-#    plugin_manager install_bundle → target = 本仓库的绝对路径
+# 2. Install into the profile (the local profile here is "desktop")
+#    Install from a local directory with the plugin manager:
+#    plugin_manager install_bundle → target = the absolute path of this repo
 npm pack
-# 或把 tarball / 目录放进 profile 的依赖里，例如
+# or put the tarball / directory into the profile's dependencies, e.g.
 #   C:\Users\<you>\.dsh\profiles\desktop\package.json
 ```
 
-插件包自带 `dsh.bundle.patch`（`package.json` 的 `dsh.bundle.patch = ./cordis.patch.yml`），profile 的组合层会读取它并插入：
+The package ships its own `dsh.bundle.patch` (`dsh.bundle.patch = ./cordis.patch.yml` in `package.json`); the profile's composition layer reads it and inserts:
 
 ```yaml
 - insert:
@@ -111,196 +119,202 @@ npm pack
       disabled: !!js process.platform !== 'win32'
 ```
 
-- **`dialect` 默认 `pwsh`**：只装插件、不切方言，会话行为与官方完全一致。
-- **安装或升级后必须重启 DSH**：运行中插入的 row 只进组合树，插件的 `apply` 不会被调用。
+- **`dialect` defaults to `pwsh`**: install the plugin without switching the dialect and session behavior is identical to the official one.
+- **You must restart DSH after install or upgrade**: a row inserted at runtime only enters the composition tree; the plugin's `apply` is not called.
 
-### 启用
+### Enabling
 
-重启后打开 **设置 → 通用**，底部会多出一行 **终端 Shell**（客户端半区注册的 `settings.general.item` 行，id `terminal-shell`，order `60`，locale 命名空间 `terminal-shell`）：
+After the restart, open **Settings → General**; a new **Terminal shell** row appears at the bottom (a `settings.general.item` row registered by the client half, id `terminal-shell`, order `60`, locale namespace `terminal-shell`):
 
 ```
-终端 Shell                                              [cmd ▾]
-选择智能体工具调用终端使用的 shell。改动后仅在新会话生效。
-cmd.exe 路径                              [C:/WINDOWS/system32/cmd.exe]
-沙箱策略                                            [申请权限 ▾]
-极简模式                                              [单次 cmd ▾]
-控制台代码页                                                [65001]
+Terminal shell                                          [cmd ▾]
+The shell the agent's tool calls run in. Changes apply to new sessions only.
+cmd.exe path                              [C:/WINDOWS/system32/cmd.exe]
+Sandbox policy                                      [Request permission ▾]
+Minimal mode                                        [One-shot cmd ▾]
+Console code page                                           [65001]
 ```
 
-（上面是选中 `cmd` 后的样子；默认 `pwsh` 时只有首行。）
+(The sketch above is the row after selecting `cmd`; with the default `pwsh` only the first line shows.)
+
+The actual settings row for the `bash` and `cmd` dialects:
+
+![The settings row with the bash dialect](assets/settings-row-bash.png)
+
+![The settings row with the cmd dialect](assets/settings-row-cmd.png)
 
 ---
 
-## 使用
+## Usage
 
-设置行的版式与官方 General 段设置行一致：左列标题（14px/22px）+ 每行一句说明（12px/18px），右侧控件；24px 列间距、16px 纵向内边距、`.5px` 底部分隔线（`--dsw-alias-border-l2`，仅整组最后一行去掉）。颜色全部取 `--dsw-alias-*` 设计变量，跟随主题。**每一行只有「标签 + 一句说明 + 控件」三件东西**。
+The row layout matches the official General-section settings rows: a left column with the title (14px/22px) plus one explanatory sentence per row (12px/18px), and a control on the right; a 24px column gap, 16px vertical padding, and a `.5px` bottom divider (`--dsw-alias-border-l2`, dropped only on the last row of the group). All colors come from `--dsw-alias-*` design variables and follow the theme. **Every row holds exactly three things: label + one sentence + control.**
 
-### 文案（以 `src/client/locales.ts` 为唯一权威）
+### Copy (`src/client/locales.ts` is the single source of truth)
 
-| 行（出现在哪个方言） | 文案 / 选项 | 写入字段 |
+| Row (which dialect) | Copy / options | Field written |
 |---|---|---|
-| 首行（全部） | 标题「终端 Shell」；说明「选择智能体工具调用终端使用的 shell。改动后仅在新会话生效。」；下拉「终端类型」，选项是小写程序名 `powershell` / `bash` / `cmd` | `dialect` |
-| 路径（`bash`） | 「Git Bash 路径」，placeholder「例如 C:/Program Files/Git/bin/bash.exe」；为空且未扫描时提示「选择 Git Bash 后会自动扫描本机；也可以直接填入 bash.exe 的完整路径。」 | `bashPath` |
-| 沙箱策略（`bash`） | 「沙箱策略」，选项 `绕过沙箱`（`unconfined`）/ `申请权限`（`escalate`） | `confinedPolicy` |
-| 极简模式（`bash`） | 「极简模式」，选项 `保持 pwsh`（`leave`）/ `单次 bash`（`oneshot`）/ `添加新预设`（`variant`） | `minimalMode` |
-| 路径（`cmd`） | 「cmd.exe 路径」，placeholder「例如 C:/Windows/System32/cmd.exe」，说明「留空则自动使用系统 cmd.exe（%ComSpec%）。」 | `cmdPath` |
-| 沙箱策略（`cmd`） | 「沙箱策略」，选项与 `bash` 同一套：`绕过沙箱` / `申请权限` | `cmdConfinedPolicy` |
-| 极简模式（`cmd`） | 「极简模式」，选项 `保持 pwsh`（`leave`）/ `单次 cmd`（`oneshot`） | `minimalMode` |
-| 控制台代码页（`cmd`） | 「控制台代码页」，默认 `65001`，数字输入 | `cmdCodePage` |
+| First row (all) | Title "Terminal shell"; description "The shell the agent's tool calls run in. Changes apply to new sessions only."; dropdown "Terminal kind", options are the lowercase program names `powershell` / `bash` / `cmd` | `dialect` |
+| Path (`bash`) | "Git Bash path", placeholder "e.g. C:/Program Files/Git/bin/bash.exe"; when empty and unscanned, the hint "Choosing Git Bash scans this machine; you can also type the full path to bash.exe." | `bashPath` |
+| Sandbox policy (`bash`) | "Sandbox policy", options `Bypass the sandbox` (`unconfined`) / `Request permission` (`escalate`) | `confinedPolicy` |
+| Minimal mode (`bash`) | "Minimal mode", options `Keep pwsh` (`leave`) / `One-shot bash` (`oneshot`) / `Add a new preset` (`variant`) | `minimalMode` |
+| Path (`cmd`) | "cmd.exe path", placeholder "e.g. C:/Windows/System32/cmd.exe", description "Leave empty to use the system cmd.exe (%ComSpec%)." | `cmdPath` |
+| Sandbox policy (`cmd`) | "Sandbox policy", the same two options as `bash`: `Bypass the sandbox` / `Request permission` | `cmdConfinedPolicy` |
+| Minimal mode (`cmd`) | "Minimal mode", options `Keep pwsh` (`leave`) / `One-shot cmd` (`oneshot`) | `minimalMode` |
+| Console code page (`cmd`) | "Console code page", default `65001`, numeric input | `cmdCodePage` |
 
-- **顺序**：`cmd` 与 `bash` 一致——路径 → 沙箱策略 → 极简模式（`cmd` 末尾多一行控制台代码页）。`bash` 专属字段（`loginShell` / `extraPath` / `pythonUtf8` / `bash` 的 `confinedPolicy`）在 `cmd` 下隐藏，反之亦然。
-- **方言下拉是一枚官方下拉触发器**，点开是官方 `Menu`，与官方段里所有枚举型偏好的渲染方式相同。
+- **Order**: `cmd` matches `bash` — path → sandbox policy → minimal mode (`cmd` adds one console-code-page row at the end). The `bash`-only fields (`loginShell` / `extraPath` / `pythonUtf8` / the `bash` `confinedPolicy`) are hidden under `cmd`, and vice versa.
+- **The dialect dropdown is an official dropdown trigger**, opening an official `Menu`, rendered the same way as every enumerated preference in the official section.
 
-### 方言切换即扫描
+### Switching the dialect triggers a scan
 
-扫描是「选 shell」的后果，不是独立动作：**把方言切到 `bash` / `cmd` 就触发一次扫描**，没有单独的检测按钮。
+Scanning is a consequence of "choosing a shell", not a separate action: **switching the dialect to `bash` / `cmd` triggers one scan**, and there is no standalone detect button.
 
-- 路径控件默认是官方 `Input`，可以直接填可执行文件完整路径；**扫描命中多于一条时，输入框换成同一套下拉**，列出全部可用路径。
-- 扫描中该位置显示「正在扫描…」；扫不到会明确提示，而不是清空输入。
-- **已经选好的、仍然有效的路径不会被后续扫描改写**。
-- 切换这一下正是最可能撞竞态的时机（同一 revision 上还排着方言写入），所以写入被拒或扫描请求失败都会**自动重试一次**（间隔 120ms），不会再出现「第一次切换没找到、再切一次才有」。
-- **挂载时不扫描、不写配置**：`/state` 只读配置，所以打开设置是瞬时的；扫描只在切换到 `bash` / `cmd` 时发生。
+- The path control defaults to the official `Input`, where you can type an executable's full path directly; **when a scan finds more than one hit, the input turns into the same kind of dropdown**, listing every usable path.
+- While scanning, that spot shows "Scanning…"; a scan that finds nothing says so explicitly instead of clearing the input.
+- **A path already chosen and still valid is never rewritten by a later scan**.
+- The switch itself is exactly the moment most likely to hit a race (a dialect write may still be queued on the same revision), so a refused write or a failed scan request **retries once automatically** (120ms apart), and you no longer see "nothing found on the first switch, only on the second".
+- **No scan and no config write on mount**: `/state` reads config only, so opening the settings is instantaneous; scanning happens only when switching to `bash` / `cmd`.
 
-### 沙箱策略两值的含义，以及默认为何不同
+### The two sandbox-policy values, and why the defaults differ
 
-两个方言各有一个独立的沙箱字段（`confinedPolicy` 给 `bash`，`cmdConfinedPolicy` 给 `cmd`），设置行按当前方言只显示对应的那个。取值都只有两种：
+Each dialect has its own sandbox field (`confinedPolicy` for `bash`, `cmdConfinedPolicy` for `cmd`), and the row shows only the one for the current dialect. Each takes exactly two values:
 
-| 值（界面） | 行为 |
+| Value (UI) | Behavior |
 |---|---|
-| `绕过沙箱`（`unconfined`） | Windows 受限档位下**直接以普通权限启动**，不调用 `ctx.sandbox.confine()`；一次调用即成功，但模型命令**不受文件沙箱限制** |
-| `申请权限`（`escalate`） | 先按官方方式进入沙箱；`bash` 的 MSYS 启动失败被标为 `denied`，模型收到官方升级提示后带 `sandbox_permissions: danger-full-access` 重试，由宿主审批 |
+| `Bypass the sandbox` (`unconfined`) | Under the restricted Windows tier, **launch directly with normal privileges** without calling `ctx.sandbox.confine()`; the call succeeds at once, but the model's commands **are not constrained by the file sandbox** |
+| `Request permission` (`escalate`) | Enter the sandbox the official way first; a `bash` MSYS launch failure is marked `denied`, the model gets the official escalation prompt and retries with `sandbox_permissions: danger-full-access`, approved by the host |
 
-**默认值不同是刻意的**（`bash` 默认 `unconfined`，`cmd` 默认 `escalate`）：
+**The differing defaults are deliberate** (`bash` defaults to `unconfined`, `cmd` to `escalate`):
 
-- **`bash` 默认 `unconfined`**：MSYS2 / Git Bash 在 Windows 受限令牌下起不来——初始化命名共享内存时被拒（`NtCreateDirectoryObject` 失败 → `0xC0000022`）。如果默认 `escalate`，每条命令都会先失败一次再走审批；默认直启才能一次成功。
-- **`cmd` 默认 `escalate`**：`cmd.exe` 能在受限令牌下正常启动（官方 windows-acl 沙箱后端的探针本身就是 `cmd /c exit 0`），所以走真实沙箱既可约束命令、又不会失败。
+- **`bash` defaults to `unconfined`**: MSYS2 / Git Bash cannot start under a restricted Windows token — initializing its named shared memory is refused (`NtCreateDirectoryObject` fails → `0xC0000022`). With an `escalate` default every command would fail once before going through approval; a direct default is what lets it succeed on the first try.
+- **`cmd` defaults to `escalate`**: `cmd.exe` starts fine under a restricted token (the official windows-acl sandbox backend's probe is itself `cmd /c exit 0`), so going through the real sandbox both constrains commands and does not fail.
 
-**工具声明**：`unconfined` 直启时执行器不向工具声明受限档位（`sandboxMode` 返回 `undefined`），模型不会被告知「命令在沙箱内」；结果里的 `sandbox.mode` 报 `danger-full-access`，这是这次调用**实际**的边界。`escalate` 走 `confine()`，`mode` / `enforcement` 保持官方原值。
+**Tool declaration**: with `unconfined` the executor does not declare a restricted tier to the tool (`sandboxMode` returns `undefined`), so the model is not told "the command runs in a sandbox"; the result's `sandbox.mode` reports `danger-full-access`, which is the **actual** boundary of that call. With `escalate` it goes through `confine()`, and `mode` / `enforcement` keep the official values.
 
-**安全含义**：`unconfined` 是显式的产品选择——Windows 受限档位下不这样就没有可用的 Git Bash；它意味着模型通过 `bash` 执行的命令不受文件沙箱约束。需要沙箱约束时选 `escalate`（官方审批）。审批完全由第一方 `dsh-tool-bash` 负责，插件只把 MSYS 启动失败分类成 `denied`，不自己实现审批。
+**Security implication**: `unconfined` is an explicit product choice — under the restricted Windows tier there is no usable Git Bash without it; it means commands the model runs through `bash` are not constrained by the file sandbox. When you need sandbox constraints, choose `escalate` (official approval). Approval is handled entirely by the first-party `dsh-tool-bash`; the plugin only classifies MSYS launch failures as `denied` and implements no approval itself.
 
-### 极简模式（`minimalMode`，仅 `bash` 有意义）
+### Minimal mode (`minimalMode`, only meaningful for `bash`)
 
-官方 `minimal` 预设是唯一自带持久 shell 的出厂预设（Windows 上是持久 pwsh）。所以 `bash` 方言下 `minimal` 会话需要单独决定怎么处理：
+The official `minimal` preset is the only factory preset with a persistent shell (persistent pwsh on Windows). Under the `bash` dialect a `minimal` session therefore needs a separate decision:
 
-| 值（界面） | 含义 |
+| Value (UI) | Meaning |
 |---|---|
-| `leave`（保持 pwsh） | 插件不介入官方 minimal 预设，保留其持久 pwsh 终端 |
-| `oneshot`（单次 bash，默认） | `minimal` 会话改用一次性 bash 工具（`cmd` 方言下是一次性 cmd），`bash` 替换、`pwsh` 隐藏 |
-| `variant`（添加新预设） | 额外注册 `minimal-gitbash` 预设（持久 bash 变体）；官方 `minimal` 原样不动。没有会话再引用它时自动移除 |
+| `leave` (Keep pwsh) | The plugin does not touch the official minimal preset; its persistent pwsh terminal stays |
+| `oneshot` (One-shot bash, default) | The `minimal` session switches to a one-shot bash tool (one-shot cmd under the `cmd` dialect); `bash` replaces, `pwsh` hides |
+| `variant` (Add a new preset) | Additionally registers the `minimal-gitbash` preset (a persistent bash variant); the official `minimal` is left as-is. Removed automatically when no session references it |
 
-- `cmd` 方言只提供 `leave` / `oneshot`——`cmd` 没有持久终端后端，不提供「添加新预设」。
-- `variant` 的变体行嵌入的是**注册那一刻**解析出的 Git Bash 绝对路径；之后改 `bashPath`（或 `confinedPolicy` / `loginShell` / `pythonUtf8`）会让定义按新输入重建，已在运行的变体会话仍跑旧那版。
-- **变体不是自动生效的**：必须每个新会话手选一次「极简模式 · Git Bash」；关掉选项时若仍有会话引用 `minimal-gitbash`，定义会保留（`retained`）并显示引用数——删掉定义会让那些会话永久打不开。
+- The `cmd` dialect offers only `leave` / `oneshot` — `cmd` has no persistent-terminal backend, so it offers no "Add a new preset".
+- The `variant` edition's row embeds the Git Bash absolute path resolved **at the moment of registration**; changing `bashPath` afterwards (or `confinedPolicy` / `loginShell` / `pythonUtf8`) rebuilds the definition from the new input, while already-running variant sessions keep running the old one.
+- **The variant is not automatic**: you must choose "极简模式 · Git Bash" once for each new session; when you turn the option off while sessions still reference `minimal-gitbash`, the definition is kept (`retained`) and shows the reference count — deleting it would make those sessions unopenable forever.
 
-### 控制台代码页（`cmdCodePage`）
+### Console code page (`cmdCodePage`)
 
-`cmd` 会话执行前用 `chcp <codePage>>nul` 切到该代码页，默认 `65001`（UTF-8），这是唯一能让非 ASCII 输出存活的值。改小代码页会让中文变替换字符。客户端严格只接受正整数，非法输入回退到 `65001`。
+A `cmd` session runs `chcp <codePage>>nul` before executing, defaulting to `65001` (UTF-8), the only value that lets non-ASCII output survive. Lowering the code page turns Chinese into replacement characters. The client strictly accepts positive integers only and falls back to `65001` on invalid input.
 
-### 路径发现顺序
+### Path discovery order
 
-**Git Bash（`bash` 方言）**：`bashPath` 为空且 `autoDiscover` 为真时，按下列顺序找，命中即止（`discoverBash`）；扫描器 `scanBashCandidates` 用同一套顺序但**列出全部**候选：
+**Git Bash (`bash` dialect)**: when `bashPath` is empty and `autoDiscover` is true, it searches in the following order and stops at the first hit (`discoverBash`); the scanner `scanBashCandidates` uses the same order but **lists every** candidate:
 
-1. 显式 `bashPath`（会话装配时显式路径即答案，不再整机扫描）
-2. `bashCandidates` 里的每一项（展开为 `bin\bash.exe` / `usr\bin\bash.exe` / `bash.exe`）
-3. 注册表 `HKLM\SOFTWARE\GitForWindows` 的 `InstallPath`
-4. `%ProgramFiles%\Git`、`%ProgramFiles(x86)%\Git`、`%LocalAppData%\Programs\Git`
-5. `%ProgramFiles%\MSYS2`、`%SystemDrive%\msys64`、`%LocalAppData%\MSYS2`
-6. `%SystemDrive%\cygwin64`、`%SystemDrive%\cygwin`
-7. PATH 上 `git.exe` / `git.cmd` / `git.bat` 反推（`<root>\bin\bash.exe`）
+1. An explicit `bashPath` (at session assembly an explicit path is the answer, no whole-machine scan)
+2. Each entry in `bashCandidates` (expanded to `bin\bash.exe` / `usr\bin\bash.exe` / `bash.exe`)
+3. The `InstallPath` under the registry key `HKLM\SOFTWARE\GitForWindows`
+4. `%ProgramFiles%\Git`, `%ProgramFiles(x86)%\Git`, `%LocalAppData%\Programs\Git`
+5. `%ProgramFiles%\MSYS2`, `%SystemDrive%\msys64`, `%LocalAppData%\MSYS2`
+6. `%SystemDrive%\cygwin64`, `%SystemDrive%\cygwin`
+7. Back-deriving from `git.exe` / `git.cmd` / `git.bat` on PATH (`<root>\bin\bash.exe`)
 
-**WSL 被硬排除**：`C:\Windows\System32\bash.exe` 和 `WindowsApps\bash.exe` 都不是 Git Bash，交给执行器会得到另一个操作系统和另一套文件系统，发现阶段直接拒绝并记下原因。
+**WSL is hard-excluded**: `C:\Windows\System32\bash.exe` and `WindowsApps\bash.exe` are not Git Bash — handing them to the executor would give a different operating system and a different filesystem, so discovery rejects them outright and records the reason.
 
-发现只做文件系统探测（`statSync`）+ 一次异步 `reg.exe query`，**不会 spawn `bash --version`**——宿主在 `agent/created` 里串行派发事件，同步 spawn 会卡住整个进程。一次扫描受 `discoverTimeoutMs` 约束。
+Discovery only probes the filesystem (`statSync`) plus one asynchronous `reg.exe query`; it **never spawns `bash --version`** — the host dispatches events serially inside `agent/created`, and a synchronous spawn would stall the whole process. One scan is bounded by `discoverTimeoutMs`.
 
-**cmd.exe（`cmd` 方言）**：`cmdPath` 为空时依次尝试 `cmdPath` → `%ComSpec%`（也认 `COMSPEC`）→ `%SystemRoot%\System32\cmd.exe`（也认 `SYSTEMROOT` / `windir`）。**不扫描磁盘**——`cmd.exe` 没有第二个合理位置。非 `cmd.exe` 的 `cmdPath` 视为未设置。三步全部落空时该会话跳过替换（`reason=cmd-not-found`），保留官方 `pwsh` 工具。
+**cmd.exe (`cmd` dialect)**: when `cmdPath` is empty it tries `cmdPath` → `%ComSpec%` (also `COMSPEC`) → `%SystemRoot%\System32\cmd.exe` (also `SYSTEMROOT` / `windir`) in turn. It **does not scan the disk** — `cmd.exe` has no second reasonable location. A `cmdPath` that is not `cmd.exe` is treated as unset. If all three miss, the session skips replacement (`reason=cmd-not-found`) and keeps the official `pwsh` tool.
 
-### PATH 组装
+### PATH assembly
 
-执行时子进程 PATH = `工具链 bin`（`ucrt64`/`mingw64`/`clang64`/`mingw32`）→ `usr\bin` → `bin` → `usr\local\bin` → `extraPath` → **宿主 PATH**。
+At execution the child process PATH = `toolchain bin` (`ucrt64`/`mingw64`/`clang64`/`mingw32`) → `usr\bin` → `bin` → `usr\local\bin` → `extraPath` → **host PATH**.
 
-顺序是有意的：MSYS2 的 `git`/`ls`/`grep` 必须赢过 Windows 上的同名同源工具，而宿主 PATH 必须保留，否则 `node`/`python` 等原生命令会消失。去重按「小写 + 去尾分隔符 + `/`→`\`」归一化。
+The order is intentional: MSYS2's `git`/`ls`/`grep` must beat the same-named tools from the same source on Windows, while the host PATH must be kept or native commands like `node`/`python` would disappear. Dedup normalizes by "lowercase + strip trailing separator + `/`→`\`".
 
 ---
 
-## CMD 方言的限制
+## cmd dialect limitations
 
-`cmd` 是唯一**不建立在官方 `dsh-tool-bash` 之上**的方言（`src/cmd/tool.ts` 是官方工具的逐字移植），下面这些约束全部来自 `cmd.exe` 与批处理语义，不是插件的取舍：
+`cmd` is the only dialect **not built on the official `dsh-tool-bash`** (`src/cmd/tool.ts` is a verbatim port of the official tool); the constraints below all come from `cmd.exe` and batch semantics, not from a choice of this plugin:
 
-1. **一次性批处理**：每次调用都是一个全新的临时 `.cmd` 脚本，`pause`、`set /p`、任何交互式提示都会挂到超时。执行器不可交互。
-2. **回显无法恢复**：`cmd.exe /q` 关掉命令回显，命令原文不会出现在输出里，只有命令自己打印的东西会返回；脚本里写 `@echo on` 也压不过 `/q`。
-3. **`%~dp0` / `%0` / `%1`–`%9` / `%*` 指向插件的内部脚本**，不是调用者写的那行命令；取工作目录要用 `%CD%`。
-4. **`%VAR%` 按批处理规则展开**：同一行的 `set` 对新变量在当行还不可见。
-5. **非 ASCII 输出依赖控制台代码页**：默认 `chcp 65001`，可用 `cmdCodePage` 改；改小会让中文变替换字符。
-6. **`cmdPath` 只接受 `cmd.exe`**：填 bash 或其它程序会被客户端拒绝并提示（`row.cmdPath.invalid`），发现流程也用 `isCmdExecutable` 判定为无效；留空自动用 `%ComSpec%` → `%SystemRoot%\System32\cmd.exe`。
-7. **没有持久 PTY**：`cmd` 方言不提供持久终端，`minimal` 预设的持久 shell 不会被替换（`minimalMode` 只对 `bash` 有意义）。
-8. **沙箱拒绝标记可能缺失**：中文 Windows 上 `cmd` 的拒绝信息是 GBK 中文，provider 的英文签名匹配不上，`sandbox.denied` 可能为 `false`——沙箱本身仍然生效，插件不伪造这个判定。
+1. **One-shot batch**: every call is a brand-new temporary `.cmd` script, and `pause`, `set /p`, or any interactive prompt will hang until the timeout. The executor is non-interactive.
+2. **Echo cannot be restored**: `cmd.exe /q` turns off command echo, so the command text never appears in the output — only what the command itself prints comes back; `@echo on` inside the script cannot override `/q`.
+3. **`%~dp0` / `%0` / `%1`–`%9` / `%*` point at the plugin's internal script**, not the command line the caller wrote; use `%CD%` for the working directory.
+4. **`%VAR%` expands by batch rules**: a `set` on the same line is not yet visible to a new variable on that line.
+5. **Non-ASCII output depends on the console code page**: default `chcp 65001`, changeable via `cmdCodePage`; lowering it turns Chinese into replacement characters.
+6. **`cmdPath` only accepts `cmd.exe`**: entering bash or another program is rejected by the client with a prompt (`row.cmdPath.invalid`), and discovery also judges it invalid via `isCmdExecutable`; leaving it empty falls back to `%ComSpec%` → `%SystemRoot%\System32\cmd.exe`.
+7. **No persistent PTY**: the `cmd` dialect offers no persistent terminal, and the `minimal` preset's persistent shell is not replaced (`minimalMode` is only meaningful for `bash`).
+8. **The sandbox-denied marker may be missing**: on Chinese Windows, `cmd`'s denial message is GBK Chinese, so the provider's English signatures do not match and `sandbox.denied` may be `false` — the sandbox still applies; the plugin does not fake this verdict.
 
-传输实现细节（为什么每次落一个临时 `.cmd` 脚本）：`cmd.exe` 不能像 `bash -c` 那样把命令当参数传——单元素、多元素、环境变量、stdin 四种传法都会在引号、`%PATH%` 展开或多行上失败。所以每次执行在**每个执行器自己的 scratch 目录**（`os.tmpdir()` 下 `dsh-cmd-<pid>-<uuid>`）写一个 `cmd-<uuid>.cmd`，脚本形如：
+Transport implementation detail (why a temporary `.cmd` script per call): `cmd.exe` cannot take the command as an argument the way `bash -c` does — single-element, multi-element, environment-variable and stdin forms all fail on quoting, `%PATH%` expansion or multi-line. So each execution writes a `cmd-<uuid>.cmd` into **each executor's own scratch directory** (`dsh-cmd-<pid>-<uuid>` under `os.tmpdir()`), of the form:
 
 ```bat
 @echo off
 chcp 65001>nul
-cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>&2 & exit /b 1)
-<模型给的命令原文>
+cd /d "<working directory>" 2>nul || (echo cmd: cannot enter the working directory 1>&2 & exit /b 1)
+<the command text from the model>
 ```
 
-- **`cd` 守卫不是装饰**：脚本从 scratch 目录启动，工作目录若已不存在，没有守卫时命令会在 scratch 目录里静默执行并 `exit 0`；UNC 路径改用 `pushd`。
-- **没有尾部 `exit /b %errorlevel%`**：`cmd` 脚本的退出码本来就是最后一条命令的退出码，显式写反而会改掉 `dir /nonexistent & echo recovered` 这类命令的 `0`。
-- **文件名以裸名传给 `cmd.exe`，`cwd` 设为脚本目录**：唯一能扛住 scratch 路径里出现 `&` `(` `)` `^` `,` `;` `%` 的形态（绝对路径形态在这些字符下全部失败）。
-- 脚本 UTF-8 无 BOM、CRLF 写入；每个执行器在 `ctx.effect` 里回收自己的 scratch 目录，插件启动时 `sweepStaleScripts()` 清掉 24 小时前的残留。
+- **The `cd` guard is not decoration**: the script starts in the scratch directory, so if the working directory no longer exists, without the guard the command would run silently in the scratch directory and `exit 0`; UNC paths switch to `pushd`.
+- **No trailing `exit /b %errorlevel%`**: a `cmd` script's exit code is already the last command's exit code; writing it explicitly would change the `0` of commands like `dir /nonexistent & echo recovered`.
+- **The file name is passed to `cmd.exe` as a bare name, with `cwd` set to the script directory**: the only form that survives `&` `(` `)` `^` `,` `;` `%` appearing in the scratch path (the absolute-path form fails on all of these).
+- The script is written as UTF-8 without BOM, CRLF; each executor reclaims its own scratch directory in `ctx.effect`, and `sweepStaleScripts()` clears anything left from more than 24 hours ago at plugin startup.
 
 ---
 
-## 配置字段表
+## Configuration reference
 
-所有字段逐个 `.volatile()`，由 Host 交给官方 `configForms`；设置行直接编辑其中一部分，其余仍可直接写 profile patch。字段与 `src/config.ts` 一一对应：
+Every field is `.volatile()` and handed to the official `configForms` by the host; the settings row edits some of them directly, and the rest can still be written into the profile patch. The fields map one-to-one to `src/config.ts`:
 
-| patch key | 类型 | 默认值 | 含义 |
+| patch key | Type | Default | Meaning |
 |---|---|---|---|
-| `dialect` | `'pwsh' \| 'bash' \| 'cmd'` | `'pwsh'` | 终端方言；`pwsh` 行为不变 |
-| `bashPath` | `string` | `''` | 显式 `bash.exe` 绝对路径；留空 = 自动发现 |
-| `bashCandidates` | `string[]` | `[]` | 额外发现根 / 显式可执行，先于内置顺序；也存上次扫描的可用路径 |
-| `autoDiscover` | `boolean` | `true` | `bashPath` 为空时是否在装配会话时自动发现 |
-| `discoverTimeoutMs` | `number` | `1500` | 一次发现的上限（只 stat 文件系统，不 spawn） |
-| `loginShell` | `boolean` | `false` | 传 `-l`，读取登录 profile |
-| `extraPath` | `string[]` | `[]` | 追加到子进程 PATH 的目录 |
-| `pythonUtf8` | `boolean` | `true` | 导出 `PYTHONIOENCODING=utf-8` |
-| `confinedPolicy` | `'unconfined' \| 'escalate'` | `'unconfined'` | `bash` 在受限档位下的处理方式 |
-| `cmdPath` | `string` | `''` | 显式 `cmd.exe` 绝对路径（只接受 `cmd.exe`）；留空 = `%ComSpec%` → `%SystemRoot%\System32\cmd.exe` |
-| `cmdCodePage` | `number` | `65001` | 脚本里 `chcp` 的代码页 |
-| `cmdConfinedPolicy` | `'escalate' \| 'unconfined'` | `'escalate'` | `cmd` 在受限档位下的处理方式 |
-| `minimalMode` | `'leave' \| 'oneshot' \| 'variant'` | `'oneshot'` | 官方 `minimal` 预设的处理方式 |
-| `timeoutMs` | `number` | `120000` | 继承自官方 bash 执行器的单命令超时 |
-| `maxTimeoutMs` | `number` | `600000` | 允许的最大超时 |
-| `maxOutputBytes` | `number` | `64000` | 前台输出上限 |
-| `maxSpillBytes` | `number` | `67108864` | 溢出到文件的字节上限（64 MiB） |
-| `graceMs` | `number` | `3000` | 终止进程的宽限时间 |
+| `dialect` | `'pwsh' \| 'bash' \| 'cmd'` | `'pwsh'` | Terminal dialect; `pwsh` keeps behavior unchanged |
+| `bashPath` | `string` | `''` | Explicit absolute path to `bash.exe`; empty = auto-discover |
+| `bashCandidates` | `string[]` | `[]` | Extra discovery roots / explicit executables, tried before the built-in order; also stores the usable paths from the last scan |
+| `autoDiscover` | `boolean` | `true` | Whether to auto-discover at session assembly when `bashPath` is empty |
+| `discoverTimeoutMs` | `number` | `1500` | Upper bound for one discovery (filesystem stat only, no spawn) |
+| `loginShell` | `boolean` | `false` | Pass `-l` to read the login profile |
+| `extraPath` | `string[]` | `[]` | Directories appended to the child process PATH |
+| `pythonUtf8` | `boolean` | `true` | Export `PYTHONIOENCODING=utf-8` |
+| `confinedPolicy` | `'unconfined' \| 'escalate'` | `'unconfined'` | How `bash` behaves under the restricted tier |
+| `cmdPath` | `string` | `''` | Explicit absolute path to `cmd.exe` (only `cmd.exe` accepted); empty = `%ComSpec%` → `%SystemRoot%\System32\cmd.exe` |
+| `cmdCodePage` | `number` | `65001` | The code page for `chcp` in the script |
+| `cmdConfinedPolicy` | `'escalate' \| 'unconfined'` | `'escalate'` | How `cmd` behaves under the restricted tier |
+| `minimalMode` | `'leave' \| 'oneshot' \| 'variant'` | `'oneshot'` | How the official `minimal` preset is treated |
+| `timeoutMs` | `number` | `120000` | Per-command timeout, inherited from the official bash executor |
+| `maxTimeoutMs` | `number` | `600000` | Maximum allowed timeout |
+| `maxOutputBytes` | `number` | `64000` | Foreground output cap |
+| `maxSpillBytes` | `number` | `67108864` | Byte cap for spilling to a file (64 MiB) |
+| `graceMs` | `number` | `3000` | Grace period before killing a process |
 
-> `confinedPolicy` 与 `cmdConfinedPolicy` 都**只有** `unconfined` / `escalate` 两值（0.2.1 从 schema 移除了 `fail`，profile 里写 `fail` 会 schema 校验失败，见[排错](#诊断与排错)）。
-
----
-
-## 卸载
-
-1. 从 profile 依赖里移除 `dsh-terminal-shell` 这一行（`cordis.patch.yml` 插入的 `terminal-shell`）。
-2. **重启 DSH**，新会话回到官方终端工具。
-
-- **无全局残留**：插件不写 `ctx.shell`、不改任何已加载的 preset、不写宿主安装目录，效果只落在会话创建时替换的那个会话上。
-- **`variant` 预设自动清理**：插件卸载时变体管理器 `release()` 注销 `minimal-gitbash` 定义（插件不在了，定义也留不住）；若仍有会话引用，它按 `retained` 语义保留，直到没有引用。
-- 已按 Git Bash / cmd 装配的**已开会话不会切回 pwsh**（工具与 prompt 段在会话创建时定稿）。
+> Both `confinedPolicy` and `cmdConfinedPolicy` take **only** `unconfined` / `escalate` (0.2.1 removed `fail` from the schema; writing `fail` in the profile fails schema validation, see [troubleshooting](#diagnostics-and-troubleshooting)).
 
 ---
 
-## 诊断与排错
+## Uninstall
 
-诊断日志（每次会话一行）：
+1. Remove the `dsh-terminal-shell` row from the profile dependencies (the `terminal-shell` inserted by `cordis.patch.yml`).
+2. **Restart DSH**; new sessions return to the official terminal tool.
+
+- **No global residue**: the plugin writes no `ctx.shell`, touches no loaded preset, and writes nothing into the host install directory; the effect lands only on the session replaced at creation time.
+- **The `variant` preset cleans itself up**: on uninstall the variant manager's `release()` unregisters the `minimal-gitbash` definition (with the plugin gone, the definition cannot stay); if sessions still reference it, it is kept under the `retained` semantics until nothing references it.
+- Sessions **already opened** under Git Bash / cmd do not switch back to `pwsh` (tools and prompt sections are fixed at session creation).
+
+---
+
+## Diagnostics and troubleshooting
+
+Diagnostic log (one line per session):
 
 ```
 %TEMP%\dsh-terminal-shell.log
 ```
 
-用环境变量 `DSH_TERMINAL_TOOL_DIAG_FILE` 覆盖路径。典型行：
+Override the path with the environment variable `DSH_TERMINAL_TOOL_DIAG_FILE`. Typical lines:
 
 ```
 [2026-10-18T02:10:00.000Z] ok session=... bash=C:\Program Files\Git\bin\bash.exe source=registry path=4 entries
@@ -310,105 +324,105 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 [2026-10-18T02:10:00.000Z] skip session=... reason=already-replaced
 ```
 
-`reason` 取值：`not-win32` / `dialect-pwsh` / `no-agent-context` / `already-replaced` / `bash-not-found` / `cmd-not-found` / `missing-service` / `minimal-left` / `mount-failed` / `cmd-script-failed` / `cmd-mount-failed`。`minimal-left` 表示会话用 `minimal` 预设且 `minimalMode` 为 `leave` / `variant`，插件按设计让开；`dialect-pwsh` 表示方言是 `pwsh`（或 cmd 会话里的 bash 路径判定），插件不介入。
+`reason` values: `not-win32` / `dialect-pwsh` / `no-agent-context` / `already-replaced` / `bash-not-found` / `cmd-not-found` / `missing-service` / `minimal-left` / `mount-failed` / `cmd-script-failed` / `cmd-mount-failed`. `minimal-left` means the session uses the `minimal` preset with `minimalMode` set to `leave` / `variant`, and the plugin steps aside by design; `dialect-pwsh` means the dialect is `pwsh` (or the bash-path verdict inside a cmd session), and the plugin does not intervene.
 
-常见症状与处置：
+Common symptoms and what to do:
 
-| 症状 | 原因 / 处置 |
+| Symptom | Cause / action |
 |---|---|
-| **改完设置没反应，「工具目录还是旧的」** | 工具目录与 prompt 段在**会话创建时定稿**。设置改的是 patch 层 entry Config，对已装配的会话无效。**新建会话**才会用新值 |
-| **重启后仍然没有新工具** | 重启前已打开的会话（含恢复出来的旧会话）不会被重新装配，日志里连一行都不会出现。**完全退出并重启宿主，然后新建会话**，别在旧会话里复测 |
-| **日志里没有该会话的行** | `agent/created` 根本没为它触发过——会话建得比插件早。处置同上 |
-| **`bash-not-found`** | 把 `bashPath` 显式指到 `C:\Program Files\Git\bin\bash.exe` 试试 |
-| **`cmd-not-found`** | 把 `cmdPath` 显式指到 `C:\WINDOWS\system32\cmd.exe` |
-| **`mount-failed` / `cmd-mount-failed`** | `detail` 里是 cordis 的原始错误（常见是配置校验或服务缺失） |
-| **profile 里写 `confinedPolicy: fail` 启动失败** | `fail` 在 0.2.1 已从 schema 移除，**不再合法**；改成 `unconfined` 或 `escalate` |
-| **`cmdPath` 填了 bash 被拒** | `cmdPath` 只接受 `cmd.exe`，客户端会提示并拒绝写入；改成 `cmd.exe` 的完整路径 |
+| **Changed the setting, nothing happened, "the tool catalog is still the old one"** | The tool catalog and prompt sections are **fixed at session creation**. The setting changes the patch-layer entry Config, which does not affect already-assembled sessions. Only a **new session** picks up the new value |
+| **Still no new tool after a restart** | Sessions open before the restart (including restored old sessions) are not re-assembled and do not even get a log line. **Fully quit and restart the host, then create a new session** — do not retest inside an old session |
+| **No line for that session in the log** | `agent/created` never fired for it — the session was created before the plugin. Same fix as above |
+| **`bash-not-found`** | Try setting `bashPath` explicitly to `C:\Program Files\Git\bin\bash.exe` |
+| **`cmd-not-found`** | Set `cmdPath` explicitly to `C:\WINDOWS\system32\cmd.exe` |
+| **`mount-failed` / `cmd-mount-failed`** | `detail` holds cordis's original error (commonly a config validation error or a missing service) |
+| **Startup fails with `confinedPolicy: fail` in the profile** | `fail` was removed from the schema in 0.2.1 and is **no longer valid**; change it to `unconfined` or `escalate` |
+| **`cmdPath` filled with bash and rejected** | `cmdPath` only accepts `cmd.exe`; the client prompts and refuses to write. Use the full path to `cmd.exe` |
 
-插件永不因自身问题让会话创建失败：`agent/created` 是串行派发的，监听器抛错会让 agent 注册失败，所以整个监听体是防御式的，任何异常只落日志。
+The plugin never lets its own problems fail session creation: `agent/created` is dispatched serially, so a throwing listener would make the agent registration fail, and the whole listener body is therefore defensive — any exception only goes to the log.
 
 ---
 
-## 开发
+## Development
 
-目录结构：
+Directory layout:
 
 ```
-src/index.ts      插件入口：apply / Config / agent 事件 / 能力探测
-src/config.ts     schemastery Config（全 volatile）+ 会话级快照
-src/discover.ts   Git Bash 自动发现（含 WSL 排除）
-src/paths.ts      路径算术：安装根、PATH 条目、校验、PATH 合成
-src/executor.ts   GitBashExecutor（继承 LocalBashExecutor，含沙箱分支）
-src/confined.ts   受限沙箱启动决策（planLaunch）与 MSYS 启动失败签名
-src/cmd/          cmd 方言：types.ts 契约、script.ts 临时 .cmd 脚本传输、
-                  discover.ts 发现、executor.ts（CmdExecutor + planCmdLaunch）、
-                  tool.ts（cmd 工具）、prompt.ts 提示词段
-src/preset.ts     预设变体管理：克隆官方 minimal 行、注册 / 注销、引用计数
-src/pty.ts        dsh-terminal-shell/pty 入口：注册 gitbash 类型的持久终端后端
-src/replace.ts    每会话替换 + 逆序回滚（bash 与 cmd 两条装配路径）
-src/diag.ts       诊断日志
-src/routes.ts     两条 /api 路由：/state 与 /discover（都不写配置）
-src/shared/protocol.ts  Host/客户端共享的线路协议（路由路径、常量、视图类型）
-src/client/       客户端半区：设置 → 通用 的「终端 Shell」行
-                  index.ts 注册 settings.general.item；row.tsx 行组件；
-                  store.ts 状态机；api.ts 取数；styles.ts 只放版式；locales.ts 文案
-src/testing.ts    仅测试用的第二入口（不发布）
+src/index.ts      Plugin entry: apply / Config / agent events / capability probe
+src/config.ts     schemastery Config (all volatile) + per-session snapshot
+src/discover.ts   Git Bash auto-discovery (including the WSL exclusion)
+src/paths.ts      Path arithmetic: install roots, PATH entries, validation, PATH composition
+src/executor.ts   GitBashExecutor (extends LocalBashExecutor, with the sandbox branch)
+src/confined.ts   Restricted-sandbox launch decision (planLaunch) and the MSYS launch-failure signatures
+src/cmd/          cmd dialect: types.ts contract, script.ts temporary .cmd script transport,
+                  discover.ts discovery, executor.ts (CmdExecutor + planCmdLaunch),
+                  tool.ts (the cmd tool), prompt.ts prompt section
+src/preset.ts     Preset variant management: clone the official minimal rows, register / unregister, refcount
+src/pty.ts        dsh-terminal-shell/pty entry: register the gitbash-type persistent terminal backend
+src/replace.ts    Per-session replacement + reverse rollback (the bash and cmd assembly paths)
+src/diag.ts       Diagnostic log
+src/routes.ts     Two /api routes: /state and /discover (neither writes config)
+src/shared/protocol.ts  Wire protocol shared by host/client (route paths, constants, view types)
+src/client/       Client half: the "Terminal shell" row under Settings → General
+                  index.ts registers settings.general.item; row.tsx the row component;
+                  store.ts the state machine; api.ts data fetching; styles.ts layout only; locales.ts copy
+src/testing.ts    Test-only second entry (not published)
 ```
 
-### 脚本
+### Scripts
 
 ```powershell
-npm run typecheck     # tsc --noEmit（devDeps 钉 0.2.1-rc.2 真 .d.ts）
-npm run build         # esbuild → lib/index.js（Host ESM）+ lib/client.js（客户端半区）+ lib/pty.js（持久终端入口）
-npm run check         # 依次跑下面所有测试
+npm run typecheck     # tsc --noEmit (devDeps pin the real 0.2.1-rc.2 .d.ts)
+npm run build         # esbuild → lib/index.js (host ESM) + lib/client.js (client half) + lib/pty.js (persistent terminal entry)
+npm run check         # run all the tests below in order
 ```
 
-- `npm run contractcheck`（**19**）：Config 全 volatile / patch 行 / 导出面 / 客户端装载形状 / bundle 未内联第一方 / atom specifier 保持 external。
-- `npm run clientsmoke`（**8**）：真实执行 `lib/client.js`——模块装载形状、react 与 atom external、apply 注册行、无 `configForms` 时降级、迟到服务替换、HMR 幂等。
-- `npm run selftest`（**51**）：路径、发现、快照、受限启动决策、`/api` 路由注册、预设行克隆与变体生命周期。
-- `npm run rowselftest`（**19**）：行状态机——`/state` 读取、乐观写入、切方言即扫描与重试、各类失败提示。
-- `npm run rendertest`（**21**）：在 jsdom 里真实渲染并点击，按 role/aria 断言下拉触发器、菜单项与路径 Input（含 cmd 四行与 cmd 极简模式两项；官方 atoms 由 `scripts/primitives-double.mjs` 顶替）。
-- `npm run cmdunit`（**37**）：cmd 单元测试——脚本模板、发现、启动判定，含真 spawn `cmd.exe`。
-- `npm run integration`（**13**）：在真实第一方服务上跑完整替换流程。
-- `npm run cmdtest`（**14**）：cmd 端到端矩阵——传输、引号、变量、多行、编码、退出码、cwd、超时、沙箱、装配。
-- `npm run ptytests`（**3**）：在真实 ConPTY 上跑持久 Git Bash——注册、跨命令保持状态、escalate 拒绝（非 Windows 跳过）。
+- `npm run contractcheck` (**19**): all-volatile Config / patch rows / export surface / client load shape / bundle does not inline first-party / atom specifiers stay external.
+- `npm run clientsmoke` (**8**): really executes `lib/client.js` — module load shape, react and atom external, apply registers the row, degrade with no `configForms`, late-service replacement, HMR idempotency.
+- `npm run selftest` (**51**): paths, discovery, snapshot, restricted launch decision, `/api` route registration, preset row cloning and variant lifecycle.
+- `npm run rowselftest` (**19**): row state machine — `/state` read, optimistic writes, scan-on-switch and retry, each kind of failure prompt.
+- `npm run rendertest` (**21**): renders and clicks for real in jsdom, asserting by role/aria on the dropdown trigger, the menu items and the path Input (including the four cmd rows and the cmd minimal-mode two options; official atoms are stood in for by `scripts/primitives-double.mjs`).
+- `npm run cmdunit` (**37**): cmd unit tests — script template, discovery, launch decision, including a real `cmd.exe` spawn.
+- `npm run integration` (**13**): runs the full replacement flow on real first-party services.
+- `npm run cmdtest` (**14**): cmd end-to-end matrix — transport, quoting, variables, multi-line, encoding, exit codes, cwd, timeout, sandbox, assembly.
+- `npm run ptytests` (**3**): runs persistent Git Bash on a real ConPTY — registration, state kept across commands, escalate denial (skipped on non-Windows).
 
-### 构建说明
+### Build notes
 
-`build.mjs` 用 esbuild 产出 plain ESM。第一方 `@deepseek-ai/*` 包保持 **external**（harness 通过安装作用域解析，内联会复制服务类并破坏 cordis 依赖的 `instanceof` / 身份检查）；客户端 bundle 把 `react` 与官方 UI atoms 也保持 external（页面会播种，内联第二份会破坏 hook 身份与 CSS-module 类名）。**esbuild 默认 `charset: 'ascii'`**，所以 bundle 里的中文字符串会写成 `\uXXXX` 转义——运行时仍是正确中文，只是产物里看不到原字面量。类型声明是手写 `.d.ts`（不经 `tsc --emitDeclarationOnly`），避免把整个第一方 `.d.ts` 图拖进包里。
+`build.mjs` uses esbuild to emit plain ESM. First-party `@deepseek-ai/*` packages stay **external** (the harness resolves them through the install scope; inlining would duplicate service classes and break the `instanceof` / identity checks cordis relies on); the client bundle keeps `react` and the official UI atoms external too (the page seeds them, and inlining a second copy would break hook identity and CSS-module class names). **esbuild defaults to `charset: 'ascii'`**, so Chinese strings in the bundle are written as `\uXXXX` escapes — still correct Chinese at runtime, just not visible as literals in the artifact. Type declarations are hand-written `.d.ts` (not via `tsc --emitDeclarationOnly`), to avoid dragging the whole first-party `.d.ts` graph into the package.
 
 ---
 
-## 兼容性
+## Compatibility
 
-- **平台**：仅 Windows。`cordis.patch.yml` 的行带 `disabled: !!js process.platform !== 'win32'`，非 Windows 上不加载。
-- **profile**：Desktop（Web shell）。设置行依赖 Web shell 自带的官方 UI atoms 模块表（`PLATFORM_MODULES`），Host 半区的替换逻辑不依赖这张表。
-- **`engines.node`**：`>=22`。
-- **`engines.dsh`**：`>=0.2.1-rc.2 <0.3.0`（本插件在此范围内开发与验证）。宿主大版本变更后需重新验证。
-- **`@deepseek-ai/dsh-llm`** 是 `peerDependency`，构建时 external（不内联第一方类）。
-- **与持久终端 bundle（如 `@deepseek-ai/dsh-experimental-terminal-bundle`）**：本插件的 `pty` 入口只在某个预设自己的持久终端组里注册 `gitbash` 后端；官方 bundle 拥有独立的 `terminals` 注册表与 `terminal_*` 工具，两者互不读写对方状态，可共存。
+- **Platform**: Windows only. The `cordis.patch.yml` row carries `disabled: !!js process.platform !== 'win32'`, so it is not loaded elsewhere.
+- **Profile**: Desktop (Web shell). The settings row relies on the official UI-atoms module table (`PLATFORM_MODULES`) that the Web shell ships; the host-half replacement logic does not depend on that table.
+- **`engines.node`**: `>=22`.
+- **`engines.dsh`**: `>=0.2.1-rc.2 <0.3.0` (developed and verified within this range). Re-verify after a major host version change.
+- **`@deepseek-ai/dsh-llm`** is a `peerDependency`, external at build time (first-party classes are not inlined).
+- **With a persistent-terminal bundle (e.g. `@deepseek-ai/dsh-experimental-terminal-bundle`)**: this plugin's `pty` entry only registers the `gitbash` backend inside a given preset's own persistent-terminal group; the official bundle owns an independent `terminals` registry and `terminal_*` tools, the two never read or write each other's state, so they can coexist.
 
-### 与其他插件共存
+### Coexisting with other plugins
 
-本插件的占用面（都带 `terminal-shell` / `dsh-terminal-shell` 前缀，冲突时以先加载者为准）：
+This plugin's footprint (all prefixed `terminal-shell` / `dsh-terminal-shell`; on conflict the first loader wins):
 
-| 面 | 名字 |
+| Surface | Name |
 |---|---|
-| 设置行 slot | `settings.general.item`，id `terminal-shell`，order `60` |
-| locale 命名空间 | `terminal-shell` |
-| bundle 行 id | `terminal-shell`（`cordis.patch.yml`） |
-| Host 路由 | `/api/dsh-terminal-shell/state`、`/api/dsh-terminal-shell/discover` |
-| 会话内工具 | `bash` 方言：替换 `bash`、隐藏 `pwsh`；`cmd` 方言：新增 `cmd`、隐藏 `pwsh` 与 `bash`（仅被替换的会话） |
+| Settings row slot | `settings.general.item`, id `terminal-shell`, order `60` |
+| locale namespace | `terminal-shell` |
+| bundle row id | `terminal-shell` (`cordis.patch.yml`) |
+| Host routes | `/api/dsh-terminal-shell/state`, `/api/dsh-terminal-shell/discover` |
+| In-session tools | `bash` dialect: replaces `bash`, hides `pwsh`; `cmd` dialect: adds `cmd`, hides `pwsh` and `bash` (only in the replaced session) |
 
-- **不写全局**：不改 `ctx.shell`、不改任何已加载的 preset、不写宿主安装目录。
-- **与另一个 Git Bash 插件（如 `dsh-gitbash-shell`）同时安装**：两者都想替换会话的 `bash` 工具。本插件在发现同 scope 已有 `bash` 工具时跳过替换（`already-replaced`），但**不区分**那个 `bash` 是否来自本插件。只装一个即可。
-- **与 UI 插件（侧边栏 / 快捷键等）**：只在设置页占用一行、一个 locale 命名空间，无其它 DOM 或全局状态。
-- **热禁用**：禁用插件后，已按 Git Bash / cmd 装配的会话不会切回 `pwsh`；新会话恢复官方终端工具；变体预设随插件一起注销。
+- **Writes no global state**: does not touch `ctx.shell`, touches no loaded preset, writes nothing into the host install directory.
+- **Installed alongside another Git Bash plugin (e.g. `dsh-gitbash-shell`)**: both want to replace the session's `bash` tool. This plugin skips replacement when it finds a `bash` tool already in the same scope (`already-replaced`), but does **not** distinguish whether that `bash` came from this plugin. Install just one.
+- **With UI plugins (sidebar / shortcuts, etc.)**: it occupies only one settings row and one locale namespace; no other DOM or global state.
+- **Hot disable**: after disabling the plugin, sessions already assembled for Git Bash / cmd do not switch back to `pwsh`; new sessions return to the official terminal tool; the variant preset is unregistered along with the plugin.
 
 ---
 
-## 参考
+## References
 
-- [`docs/DESIGN.md`](docs/DESIGN.md)：架构与模块设计（能力清单、决策理由、偏离项与待验证项，随代码维护）。
-- [`docs/history/`](docs/history/README.md)：历史规划与评审归档（`PLAN-cmd-dialect.md`、`PLAN-confined-bash.md`、`PLAN-minimal-mode.md`、`REVIEW-cmd-dialect.md`）。注意其中版本号是重编号之前的旧编号，见 `CHANGELOG.md` 的「Version numbering」。
-- [`CHANGELOG.md`](CHANGELOG.md)：版本变更记录（0.2.1 段落记录本次设置行改版、`fail` 移除与 `cmdPath` 校验）。
+- [`docs/DESIGN.md`](docs/DESIGN.md): architecture and module design (capability list, decision rationale, deviations and open items, maintained alongside the code).
+- [`docs/history/`](docs/history/README.md): archived historical planning and review (`PLAN-cmd-dialect.md`, `PLAN-confined-bash.md`, `PLAN-minimal-mode.md`, `REVIEW-cmd-dialect.md`). Note that their version numbers are the old numbering from before the renumbering — see "Version numbering" in `CHANGELOG.md`.
+- [`CHANGELOG.md`](CHANGELOG.md): version history (the 0.2.1 section records this settings-row redesign, the `fail` removal and the `cmdPath` validation).

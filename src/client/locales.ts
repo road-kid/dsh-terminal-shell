@@ -44,7 +44,7 @@ export const zh: Dictionary = {
   'row.cmdPath.placeholder': '例如 C:/Windows/System32/cmd.exe',
   'row.cmdPath.invalid': '这里要填 cmd.exe 的完整路径，不能是 bash 或其它程序。',
   'row.cmdCodePage.label': '控制台代码页',
-  'row.cmdCodePage.description': '跟随 Harness 的解码方式，执行前用 chcp 切到该代码页，默认 65001（UTF-8）。',
+  'row.cmdCodePage.description': '跟随 Harness 的解码方式，默认 65001（UTF-8），执行前用 chcp 切到该代码页。',
   'row.discovering': '正在扫描…',
   'row.foundNone': '没有找到可用的终端程序，请直接填入完整路径。',
   'row.notSupported': '当前 DSH 版本不支持自动切换：{reason}',
@@ -88,7 +88,7 @@ export const en: Dictionary = {
   'row.cmdPath.invalid': 'Enter the full path to cmd.exe; bash or another program is not accepted.',
   'row.cmdCodePage.label': 'Console code page',
   'row.cmdCodePage.description':
-    'Follows the Harness decoding: switches to this code page with chcp before running; defaults to 65001 (UTF-8).',
+    'Follows the Harness decoding: defaults to 65001 (UTF-8); switches to this code page with chcp before running.',
   'row.discovering': 'Scanning…',
   'row.foundNone': 'No usable terminal found. Type the full path.',
   'row.notSupported': 'Not supported by this DSH version: {reason}',
