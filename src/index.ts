@@ -84,15 +84,18 @@ export function apply(ctx: Context, config: RawConfig): void {
   // accurate even in that case.
   const initial = snapshotConfig(config)
 
+  // One sweep per host load, whichever dialect is selected: a previous host
+  // that crashed mid-execution can leave a cmd scratch directory behind, and
+  // this is the only moment where no cmd process of ours can still read one.
+  const sweptCount = sweepStaleScripts()
+
   if (initial.dialect === 'pwsh') {
-    writeDiagnostic('loaded with dialect=pwsh; sessions keep the platform terminal tool')
-  } else if (initial.dialect === 'cmd') {
-    // One sweep per host load: a previous host that crashed mid-execution can
-    // leave a scratch directory behind, and this is the only moment where no
-    // cmd process of ours can still be reading from one.
-    const swept = sweepStaleScripts()
     writeDiagnostic(
-      `loaded with dialect=cmd; cmdPath=${initial.cmdPath === '' ? '(auto)' : initial.cmdPath} codepage=${initial.cmdCodePage} confined=${initial.cmdConfinedPolicy}${swept > 0 ? ` swept=${swept}` : ''}`,
+      `loaded with dialect=pwsh; sessions keep the platform terminal tool${sweptCount > 0 ? ` swept=${sweptCount}` : ''}`,
+    )
+  } else if (initial.dialect === 'cmd') {
+    writeDiagnostic(
+      `loaded with dialect=cmd; cmdPath=${initial.cmdPath === '' ? '(auto)' : initial.cmdPath} codepage=${initial.cmdCodePage} confined=${initial.cmdConfinedPolicy}${sweptCount > 0 ? ` swept=${sweptCount}` : ''}`,
     )
   }
 

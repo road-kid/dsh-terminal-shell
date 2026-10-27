@@ -53,6 +53,23 @@ export type Dialect = 'pwsh' | 'bash' | 'cmd'
  */
 export type MinimalMode = 'leave' | 'oneshot' | 'variant'
 
+/**
+ * What a Git Bash command does when the standing Windows sandbox is confined.
+ *
+ * Lives here (not in `src/confined.ts`) because the client half reads it too:
+ * `src/shared/protocol.ts` is the only module both halves may import.
+ */
+export type ConfinedPolicy = 'unconfined' | 'escalate'
+
+/**
+ * What a `cmd.exe` command does when the standing Windows sandbox is confined.
+ *
+ * Separate from `ConfinedPolicy` because the dialects have independent fields
+ * and different defaults (`cmd` defaults to `escalate`, Git Bash to
+ * `unconfined`).
+ */
+export type CmdConfinedPolicy = 'escalate' | 'unconfined'
+
 /** Lifecycle of the `minimal-gitbash` preset variant. */
 export type VariantStatus = 'absent' | 'registered' | 'retained' | 'failed'
 

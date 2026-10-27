@@ -44,6 +44,8 @@ const TAG = 'terminal-shell'
 
 /** Fallback order for the `tool:pwsh` prompt section when the table lookup fails. */
 const TOOL_PWSH_ORDER = 1010
+/** `TOOL_BASH` in `@deepseek-ai/dsh-system-prompt`; fallback when unregistered. */
+const TOOL_BASH_ORDER = 1000
 
 /**
  * What a session-level attempt produced, for tests and diagnostics.
@@ -343,7 +345,9 @@ async function installCmdSession(
           undo.push(
             systemPrompt.section({
               name: section,
-              order: systemPrompt.getSectionOrder(name === 'pwsh' ? 'TOOL_PWSH' : 'TOOL_BASH'),
+              order:
+                systemPrompt.getSectionOrder(name === 'pwsh' ? 'TOOL_PWSH' : 'TOOL_BASH') ??
+                (name === 'pwsh' ? TOOL_PWSH_ORDER : TOOL_BASH_ORDER),
               text: '',
             }),
           )
@@ -360,13 +364,19 @@ async function installCmdSession(
 
     // `tool:cmd` shares the order of the section it replaces: exactly one shell
     // tool is described to the model, in the slot the shell section always had.
-    undo.push(
-      systemPrompt.section({
-        name: 'tool:cmd',
-        order: systemPrompt.getSectionOrder('TOOL_PWSH'),
-        text: CMD_PROMPT_SECTION,
-      }),
-    )
+    // Guarded like the bash path: a section registry that already holds this
+    // name must not fail the whole install (the tool is what makes it work).
+    try {
+      undo.push(
+        systemPrompt.section({
+          name: 'tool:cmd',
+          order: systemPrompt.getSectionOrder('TOOL_PWSH') ?? TOOL_PWSH_ORDER,
+          text: CMD_PROMPT_SECTION,
+        }),
+      )
+    } catch (error) {
+      warn(id, `cannot register the tool:cmd prompt section: ${error instanceof Error ? error.message : String(error)}`)
+    }
 
     agentCtx.effect(() => () => {
       for (const disposer of undo.reverse()) {

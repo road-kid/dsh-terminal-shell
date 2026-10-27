@@ -17,6 +17,8 @@
 
 import type { ConfinedSandboxMode, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 
+import type { CmdConfinedPolicy } from '../shared/protocol.ts'
+
 /**
  * How to launch `cmd.exe` when the standing sandbox policy is confined.
  *
@@ -26,7 +28,7 @@ import type { ConfinedSandboxMode, SandboxMode } from '@deepseek-ai/dsh-sandbox'
  * `cmd.exe` starts fine under a restricted token — it is what the official
  * windows-acl backend uses as its own functional probe.
  */
-export type CmdConfinedPolicy = 'escalate' | 'unconfined'
+export type { CmdConfinedPolicy }
 
 /** Where a resolved `cmd.exe` came from, for diagnostics and tests. */
 export type CmdSource = 'config' | 'comspec' | 'system-root'

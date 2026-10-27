@@ -1,5 +1,7 @@
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 
+import type { ConfinedPolicy } from './shared/protocol.ts'
+
 /**
  * How a Git Bash command is launched when the standing sandbox is confined.
  *
@@ -8,7 +10,7 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
  * what the executor does about that, without the plugin ever approving an
  * escalation itself (that belongs to the first-party `tool-bash`).
  */
-export type ConfinedPolicy = 'unconfined' | 'escalate'
+export type { ConfinedPolicy }
 
 /**
  * Stderr substrings that identify an MSYS2 startup denial.

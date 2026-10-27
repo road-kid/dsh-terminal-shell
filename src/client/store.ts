@@ -1,7 +1,11 @@
 import { fetchCandidates, fetchState } from './api.ts'
-import type { CmdConfinedPolicy } from '../cmd/types.ts'
-import type { ConfinedPolicy } from '../confined.ts'
-import type { MinimalMode, VariantStatus } from '../shared/protocol.ts'
+import type {
+  CmdConfinedPolicy,
+  ConfinedPolicy,
+  Dialect,
+  MinimalMode,
+  VariantStatus,
+} from '../shared/protocol.ts'
 import type { ConfigFormLike, FieldOp, FormSnapshot, TerminalToolValues, Translate } from './types.ts'
 
 /**
@@ -23,10 +27,7 @@ import type { ConfigFormLike, FieldOp, FormSnapshot, TerminalToolValues, Transla
  * instant even on a machine with many candidate roots.
  */
 
-/** Which terminal tool a session gets. Mirrors `Dialect` in the wire protocol. */
-export type Dialect = 'pwsh' | 'bash' | 'cmd'
-
-export type { MinimalMode, VariantStatus }
+export type { Dialect, MinimalMode, VariantStatus }
 
 /** Variant state as the row renders it. */
 export interface VariantInfo {
@@ -103,6 +104,13 @@ export const DEFAULT_CMD_CODE_PAGE = 65001
  * found"; one short retry turns that into a blip.
  */
 const DISCOVERY_RETRY_MS = 120
+
+/**
+ * Upper bound for one route call. `/discover` may spawn `reg.exe` and stat the
+ * filesystem, so a hung Host would otherwise leave `discovering` true forever
+ * and the whole row disabled.
+ */
+const REQUEST_TIMEOUT_MS = 20_000
 
 /** Initial state: nothing known yet, and the default keeps sessions on pwsh. */
 export const INITIAL_ROW_STATE: RowState = {
@@ -447,6 +455,9 @@ export function createRowController(
     write([{ op: 'set', path: ['cmdConfinedPolicy'], value: policy }])
   }
 
+  /** Pending discovery retry, cleared on teardown so it cannot outlive the row. */
+  let discoveryTimer: ReturnType<typeof setTimeout> | undefined
+
   const discover = (dialectArg?: Dialect, options?: { keepError?: boolean }): void => {
     const dialect: Dialect = dialectArg ?? store.getState().dialect
     if (dialect === 'pwsh') return
@@ -455,7 +466,7 @@ export function createRowController(
     const current = isCmd ? store.getState().cmdPath : store.getState().bashPath
     store.setState({ discovering: true, ...(keepError ? {} : { error: undefined }), notice: undefined })
     const run = (allowRetry: boolean): void => {
-      void fetchCandidates(dialect, current)
+      void fetchCandidates(dialect, current, AbortSignal.timeout(REQUEST_TIMEOUT_MS))
         .then((view) => {
           const usable: string[] = []
           for (const candidate of view.candidates) {
@@ -493,7 +504,8 @@ export function createRowController(
           // The route can be missing for an instant while the Host re-applies
           // the entry after a write; retry once before blaming the Host.
           if (allowRetry) {
-            setTimeout(() => {
+            discoveryTimer = setTimeout(() => {
+              discoveryTimer = undefined
               run(false)
             }, DISCOVERY_RETRY_MS)
             return
@@ -514,7 +526,7 @@ export function createRowController(
       disposers.push(scope.subscribe(syncSettings))
     }
 
-    void fetchState()
+    void fetchState(AbortSignal.timeout(REQUEST_TIMEOUT_MS))
       .then((state) => {
         if (!active) return
         store.setState({
@@ -556,6 +568,10 @@ export function createRowController(
 
     return () => {
       active = false
+      if (discoveryTimer !== undefined) {
+        clearTimeout(discoveryTimer)
+        discoveryTimer = undefined
+      }
       for (const dispose of disposers) dispose()
     }
   }

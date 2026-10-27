@@ -17,8 +17,7 @@ import {
   type RowController,
   type RowState,
 } from './store.ts'
-import type { CmdConfinedPolicy } from '../cmd/types.ts'
-import type { ConfinedPolicy } from '../confined.ts'
+import type { CmdConfinedPolicy, ConfinedPolicy } from '../shared/protocol.ts'
 import type { RowProps } from './types.ts'
 
 /**

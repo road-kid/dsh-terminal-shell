@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs'
 import { JSON_SCHEMA, Type, dump, load } from 'js-yaml'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -390,6 +391,15 @@ export function createVariantManager(ctx: Context): VariantManager {
   }
 }
 
+/** Whether `path` is an existing regular file (the presets.resolve gate needs one). */
+function isExecutableFile(path: string): boolean {
+  try {
+    return statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
+
 /**
  * Resolve the concrete inputs for one variant registration.
  *
@@ -406,9 +416,13 @@ export async function resolveVariantSpec(options: {
   readonly loginShell: boolean
   readonly pythonUtf8: boolean
 }): Promise<VariantSpec | undefined> {
-  if (options.bashPath.trim() !== '') {
+  const configured = options.bashPath.trim()
+  // A stale configured path would make every `minimal-gitbash` session
+  // unopenable (`presets.resolve` throws), so it is validated here and falls
+  // through to discovery, exactly like an empty one.
+  if (configured !== '' && isExecutableFile(configured)) {
     return {
-      bashPath: options.bashPath.trim(),
+      bashPath: configured,
       confinedPolicy: options.confinedPolicy,
       loginShell: options.loginShell,
       pythonUtf8: options.pythonUtf8,

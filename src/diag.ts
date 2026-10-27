@@ -29,12 +29,19 @@ function stamp(): string {
   return new Date().toISOString()
 }
 
+/** Directories already created by this process (a re-mkdir per line is waste). */
+const preparedDirs = new Set<string>()
+
 /** Append one line to the diagnostic log. Never throws. */
 export function writeDiagnostic(message: string): void {
   const line = `[${stamp()}] ${message}\n`
   try {
     const path = diagnosticPath()
-    mkdirSync(dirname(path), { recursive: true })
+    const dir = dirname(path)
+    if (!preparedDirs.has(dir)) {
+      mkdirSync(dir, { recursive: true })
+      preparedDirs.add(dir)
+    }
     appendFileSync(path, line, 'utf8')
   } catch {
     // Diagnostics are best-effort by contract.

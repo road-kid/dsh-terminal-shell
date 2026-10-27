@@ -5,7 +5,7 @@ import z from '@deepseek-ai/schemastery'
 export declare const name = 'terminal-shell'
 export declare const inject: string[]
 export type RawConfig = BashLocalConfig & {
-  readonly dialect: 'pwsh' | 'bash'
+  readonly dialect: 'pwsh' | 'bash' | 'cmd'
   readonly bashPath: string
   readonly bashCandidates: readonly string[]
   readonly autoDiscover: boolean
@@ -13,7 +13,10 @@ export type RawConfig = BashLocalConfig & {
   readonly loginShell: boolean
   readonly extraPath: readonly string[]
   readonly pythonUtf8: boolean
-  readonly confinedPolicy: 'unconfined' | 'escalate' | 'fail'
+  readonly confinedPolicy: 'unconfined' | 'escalate'
+  readonly cmdPath: string
+  readonly cmdCodePage: number
+  readonly cmdConfinedPolicy: 'escalate' | 'unconfined'
   readonly minimalMode: 'leave' | 'oneshot' | 'variant'
 }
 export type SkipReason =
@@ -25,8 +28,17 @@ export type SkipReason =
   | 'missing-service'
   | 'minimal-left'
   | 'mount-failed'
+  | 'dialect-cmd'
+  | 'cmd-not-found'
+  | 'cmd-script-failed'
+  | 'cmd-mount-failed'
 export type InstallResult =
-  | { readonly status: 'installed'; readonly bashPath: string }
+  | {
+      readonly status: 'installed'
+      readonly bashPath: string
+      /** Present only for the cmd dialect. */
+      readonly cmdPath?: string
+    }
   | { readonly status: 'skipped'; readonly reason: SkipReason; readonly detail?: string }
 export declare const Config: z<RawConfig>
 export declare function apply(ctx: Context, config: RawConfig): void

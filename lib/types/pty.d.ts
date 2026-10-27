@@ -9,7 +9,7 @@ export type PtyConfig = {
   readonly shellArgs: readonly string[]
   readonly pythonUtf8: boolean
   readonly loginShell: boolean
-  readonly confinedPolicy: 'unconfined' | 'escalate' | 'fail'
+  readonly confinedPolicy: 'unconfined' | 'escalate'
 }
 export declare const Config: z<PtyConfig>
 export declare function apply(ctx: Context, config: PtyConfig): Promise<void>

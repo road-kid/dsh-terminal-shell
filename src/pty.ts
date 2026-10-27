@@ -163,7 +163,10 @@ export async function apply(ctx: Context, config: PtyConfig): Promise<void> {
         env,
       })
     })
-    ctx.terminals.registerBackend(backend)
+    // Tie the registration to this fiber: the service disposes on its own ctx,
+    // so without this an HMR re-apply leaves the old backend (and its stale
+    // bashPath/policy) serving terminals until a full host restart.
+    ctx.effect(() => ctx.terminals.registerBackend(backend), 'terminal-shell: pty backend')
     writeDiagnostic(`pty: registered backend=${resolved.backendType} bash=${resolved.shellPath} policy=${choice}`)
   } catch (error) {
     // A preset row must not take the whole composition down: report and stop.
