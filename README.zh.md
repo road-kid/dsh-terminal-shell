@@ -1,5 +1,7 @@
 # dsh-terminal-shell
 
+[English](README.md) | 中文
+
 在 Windows 上选择智能体调用的终端工具背后用哪个 shell：**PowerShell**（`pwsh`）、**本机 Git Bash**（`bash`），或 **`cmd.exe`**（`cmd`）。
 
 ## 这是什么

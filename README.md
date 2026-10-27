@@ -1,5 +1,7 @@
 # dsh-terminal-shell
 
+English | [中文](README.zh.md)
+
 On Windows, choose which shell sits behind the terminal tool the agent invokes: **PowerShell** (`pwsh`), the **local Git Bash** (`bash`), or **`cmd.exe`** (`cmd`).
 
 ## What this is
