@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="heroTitle heroDesc">
+  <title id="heroTitle">dsh-terminal-shell — choose the shell behind the agent's terminal tool on Windows</title>
+  <desc id="heroDesc">A dark terminal-themed banner: the repository name dsh-terminal-shell, the plain-language promise that new sessions can run PowerShell, local Git Bash, or cmd.exe, and a terminal card showing the three shells with bash selected and a MINGW64 Git Bash version line.</desc>
+
+  <rect width="1200" height="340" rx="26" fill="#0A0C10"/>
+  <rect x="0.5" y="0.5" width="1199" height="339" rx="25.5" fill="none" stroke="#161C26"/>
+
+  <!-- title block -->
+  <g id="title-block">
+    <text x="64" y="76" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" letter-spacing="2.4" fill="#7C8AA0">DSH PLUGIN &#183; WINDOWS TERMINAL</text>
+    <text x="64" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="48" font-weight="700" fill="#F2F5FA">dsh-terminal-shell</text>
+    <text x="64" y="192" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" fill="#C3CCDA">Choose the shell behind the agent&#8217;s terminal tool:</text>
+    <text x="64" y="222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" fill="#C3CCDA">PowerShell, local Git Bash, or cmd.exe.</text>
+    <text x="64" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="20" fill="#8A96A8">Per new session &#183; no preset edits &#183; no global shell takeover.</text>
+    <text x="64" y="300" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16.5" letter-spacing="0.6" fill="#6F7C90">v0.2.1 &#183; MIT &#183; Windows &#183; DSH &#8805; 0.2.1-rc.2</text>
+  </g>
+
+  <!-- terminal proof card -->
+  <g id="terminal-card">
+    <rect x="688" y="44" width="448" height="252" rx="14" fill="#0F141B" stroke="#1E2733"/>
+    <circle cx="714" cy="68" r="5" fill="#3A4656"/>
+    <circle cx="732" cy="68" r="5" fill="#3A4656"/>
+    <circle cx="750" cy="68" r="5" fill="#3A4656"/>
+    <text x="770" y="73" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" fill="#6F7C90">terminal</text>
+    <line x1="712" y1="88" x2="1112" y2="88" stroke="#1B2431"/>
+
+    <text x="712" y="122" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15.5" fill="#7C8AA0">choose the shell for new sessions</text>
+
+    <!-- shell chips -->
+    <rect x="712" y="140" width="86" height="40" rx="10" fill="none" stroke="#2A3442"/>
+    <text x="755" y="166" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#8A96A8">pwsh</text>
+
+    <rect x="808" y="140" width="78" height="40" rx="10" fill="#16301F" stroke="#46D07A"/>
+    <text x="847" y="166" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#6CE59B">bash</text>
+
+    <rect x="896" y="140" width="72" height="40" rx="10" fill="none" stroke="#2A3442"/>
+    <text x="932" y="166" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#8A96A8">cmd</text>
+
+    <line x1="712" y1="202" x2="1112" y2="202" stroke="#1B2431"/>
+
+    <text x="712" y="236" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18" fill="#46D07A">&#10095;</text>
+    <text x="744" y="236" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#E7ECF3">bash --version</text>
+    <text x="744" y="266" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" fill="#7C8AA0">GNU bash 5.2.37(1)-release &#183; x86_64-pc-msys</text>
+  </g>
+</svg>

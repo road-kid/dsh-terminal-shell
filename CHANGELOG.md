@@ -35,6 +35,8 @@ to translate them. The first version actually published under the new numbering 
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-29
+
 ### Added
 
 - **A new settings option decides which bash the sidebar's "New Terminal" menu uses.**
@@ -49,6 +51,16 @@ to translate them. The first version actually published under the new numbering 
   and nothing is written to the profile. The menu entry stays labelled `bash` (never
   `bash.exe`) and launches the Git Bash; the plain WSL `bash` candidate is deduped away
   (same `bash` executable kind). 「系统默认」 leaves the stock menu untouched.
+
+### Docs
+
+- **Both READMEs were rewritten and brought in line with the official install path and
+  project conventions.** They now lead with a comparison against the common community
+  approaches, follow the official install flow (`dsh plugin --profile <profile> add
+  dsh-terminal-shell`, or the in-app Add-plugin dialog) instead of internal tooling, fold
+  the stopgap/install boundary and the `cmd` dialect constraints into one 「已知限制」 /
+  "Known limitations" section in the latter half, and drop the redundant local-docs
+  reference list. A hero SVG and a settings-row SVG were added as the primary visuals.
 
 ## [0.2.1]
 

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="settingsTitle settingsDesc">
+  <title id="settingsTitle">Terminal shell settings row</title>
+  <desc id="settingsDesc">An illustration of the Terminal shell row under Settings, General: Terminal shell (bash), Git Bash path, Sandbox policy, Minimal mode, and the new Sidebar terminal option set to Local Git Bash.</desc>
+
+  <rect width="1200" height="620" rx="20" fill="#FFFFFF" stroke="#E6E9EF"/>
+
+  <!-- header -->
+  <g>
+    <text x="48" y="52" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="24" font-weight="700" fill="#14181F">Terminal shell</text>
+    <text x="48" y="78" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" fill="#8A93A3">Settings &#8594; General</text>
+    <line x1="24" y1="96" x2="1176" y2="96" stroke="#EEF1F5"/>
+  </g>
+
+  <!-- row 0: Terminal shell -->
+  <g>
+    <text x="48" y="136" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="600" fill="#1A1F2A">Terminal shell</text>
+    <text x="48" y="164" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="16.5" fill="#6B7486">The shell the agent&#8217;s tool calls run in. Changes apply to new sessions only.</text>
+    <rect x="1032" y="124" width="120" height="40" rx="10" fill="#F5F7FA" stroke="#D8DDE6"/>
+    <text x="1052" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="17" fill="#2A3340">bash</text>
+    <text x="1122" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="15" fill="#8891A1">&#9662;</text>
+    <line x1="48" y1="192" x2="1152" y2="192" stroke="#EEF1F5"/>
+  </g>
+
+  <!-- row 1: Git Bash path -->
+  <g>
+    <text x="48" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="600" fill="#1A1F2A">Git Bash path</text>
+    <text x="48" y="260" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="16.5" fill="#6B7486">When empty, scans this machine for Git Bash; or type the full path.</text>
+    <rect x="760" y="220" width="392" height="40" rx="10" fill="#F5F7FA" stroke="#D8DDE6"/>
+    <text x="780" y="246" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15.5" fill="#33404F">C:/Program Files/Git/bin/bash.exe</text>
+    <line x1="48" y1="288" x2="1152" y2="288" stroke="#EEF1F5"/>
+  </g>
+
+  <!-- row 2: Sandbox policy -->
+  <g>
+    <text x="48" y="328" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="600" fill="#1A1F2A">Sandbox policy</text>
+    <text x="48" y="356" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="16.5" fill="#6B7486">How bash runs under the restricted Windows sandbox tier.</text>
+    <rect x="942" y="316" width="210" height="40" rx="10" fill="#F5F7FA" stroke="#D8DDE6"/>
+    <text x="962" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="17" fill="#2A3340">Bypass the sandbox</text>
+    <text x="1122" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="15" fill="#8891A1">&#9662;</text>
+    <line x1="48" y1="384" x2="1152" y2="384" stroke="#EEF1F5"/>
+  </g>
+
+  <!-- row 3: Minimal mode -->
+  <g>
+    <text x="48" y="424" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="600" fill="#1A1F2A">Minimal mode</text>
+    <text x="48" y="452" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="16.5" fill="#6B7486">How the official minimal preset (persistent pwsh) is handled.</text>
+    <rect x="982" y="412" width="170" height="40" rx="10" fill="#F5F7FA" stroke="#D8DDE6"/>
+    <text x="1002" y="438" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="17" fill="#2A3340">One-shot bash</text>
+    <text x="1122" y="438" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="15" fill="#8891A1">&#9662;</text>
+  </g>
+
+  <!-- row 4: Sidebar terminal (new) -->
+  <g>
+    <rect x="24" y="484" width="1152" height="90" rx="10" fill="#F2FBF6"/>
+    <rect x="24" y="484" width="4" height="90" rx="2" fill="#12A150"/>
+    <text x="48" y="524" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="600" fill="#12241A">Sidebar terminal</text>
+    <rect x="292" y="508" width="44" height="20" rx="6" fill="#E3F6EA"/>
+    <text x="314" y="523" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#128A46">NEW</text>
+    <text x="48" y="552" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="16.5" fill="#4E6A58">Which bash the sidebar New Terminal launches; the system default is the PATH bash (WSL on Windows).</text>
+    <rect x="972" y="510" width="180" height="40" rx="10" fill="#EAF9F0" stroke="#12A150"/>
+    <text x="992" y="536" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="17" fill="#12633B">Local Git Bash</text>
+    <text x="1122" y="536" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="15" fill="#3E9A6A">&#9662;</text>
+  </g>
+</svg>
