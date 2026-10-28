@@ -8,6 +8,7 @@ import { Config, snapshotConfig, type ConfigSnapshot, type RawConfig } from './c
 import { installSession } from './replace.ts'
 import { createVariantManager, resolveVariantSpec } from './preset.ts'
 import { registerRoutes } from './routes.ts'
+import { applySidebarBash } from './sidebar.ts'
 import { writeDiagnostic } from './diag.ts'
 import { sweepStaleScripts } from './cmd/script.ts'
 import type { CapabilityView, Dialect, ReplaceReport } from './shared/protocol.ts'
@@ -128,11 +129,29 @@ export function apply(ctx: Context, config: RawConfig): void {
   })
   ctx.effect(() => () => variant.release(), 'terminal-shell: variant')
 
+  // The interactive sidebar's New Terminal menu belongs to the core
+  // `terminal-controller`; this plugin only overrides its `bash` choice, in
+  // memory, when `sidebarBash` is `gitbash`. Resolved through `inject` because
+  // the controller is a sibling host row whose activation order is not ours.
+  // Once resolved, `hostCtx` is the context that can see the service, and a
+  // volatile edit re-applies through the same reference.
+  let hostCtx: Context = ctx
+  const refreshSidebar = (): void => {
+    void applySidebarBash(hostCtx, snapshotConfig(config)).catch((error: unknown) => {
+      writeDiagnostic(`sidebar bash: apply failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+  ctx.inject(['terminalController'], (scoped: Context) => {
+    hostCtx = scoped
+    refreshSidebar()
+  })
+
   // Volatile-only edits do not reload this fiber: the loader commits the new
   // values and emits this event, so this is where a mode change takes effect
   // without restarting the host.
   ctx.on('loader/volatile-update', () => {
     syncVariant(snapshotConfig(config))
+    refreshSidebar()
   })
 
   // The settings row reads its state and candidates over `/api`; registering

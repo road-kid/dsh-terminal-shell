@@ -3,7 +3,7 @@ import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import type { Config as BashLocalConfig } from '@deepseek-ai/dsh-bash-local'
 import type { CmdConfinedPolicy } from './cmd/types.ts'
 import type { ConfinedPolicy } from './confined.ts'
-import type { Dialect, MinimalMode } from './shared/protocol.ts'
+import type { Dialect, MinimalMode, SidebarBash } from './shared/protocol.ts'
 
 /**
  * Plugin configuration.
@@ -127,6 +127,18 @@ export const Config = z.object({
    * opts into the other two from the settings row.
    */
   minimalMode: z.union(['leave', 'oneshot', 'variant'] as const).default('oneshot').volatile(),
+
+  /**
+   * Which `bash` the *interactive sidebar* New Terminal menu uses.
+   *
+   * That menu is the core terminal-controller's, built from PATH-resolvable
+   * names, so on Windows the bare `bash` reaches the WSL launcher first. `gitbash`
+   * makes this plugin resolve the local Git Bash at runtime (via the same
+   * discovery the agent tool uses, never a pinned path) and hand it to the live
+   * controller; `system` leaves the stock menu untouched. Default `system` keeps
+   * installing the plugin from changing the sidebar at all.
+   */
+  sidebarBash: z.union(['system', 'gitbash'] as const).default('system').volatile(),
 })
 
 /** Validated config as cordis hands it to `apply`. */
@@ -144,6 +156,7 @@ export type RawConfig = BashLocalConfig & {
   readonly cmdCodePage: number
   readonly cmdConfinedPolicy: CmdConfinedPolicy
   readonly minimalMode: MinimalMode
+  readonly sidebarBash: SidebarBash
 }
 
 /**
@@ -168,6 +181,7 @@ export interface ConfigSnapshot {
   readonly cmdCodePage: number
   readonly cmdConfinedPolicy: CmdConfinedPolicy
   readonly minimalMode: MinimalMode
+  readonly sidebarBash: SidebarBash
   readonly cwd: string | undefined
   readonly timeoutMs: number
   readonly maxTimeoutMs: number
@@ -257,6 +271,11 @@ function readDialect(value: unknown): Dialect {
   return 'pwsh'
 }
 
+/** Read the sidebar-bash choice, defaulting to `system` (stock menu). */
+function readSidebarBash(value: unknown): SidebarBash {
+  return read<string>(value, 'system') === 'gitbash' ? 'gitbash' : 'system'
+}
+
 /**
  * Defaults mirrored from the schemastery schema; used only for unvalidated input.
  */
@@ -297,6 +316,7 @@ export function snapshotConfig(config: RawConfig): ConfigSnapshot {
     cmdCodePage: readCodePage(source.cmdCodePage),
     cmdConfinedPolicy: readCmdConfinedPolicy(source.cmdConfinedPolicy),
     minimalMode: readMinimalMode(source.minimalMode),
+    sidebarBash: readSidebarBash(source.sidebarBash),
     cwd: read<string>(source.cwd, '') || undefined,
     timeoutMs: read<number>(source.timeoutMs, DEFAULTS.timeoutMs),
     maxTimeoutMs: read<number>(source.maxTimeoutMs, DEFAULTS.maxTimeoutMs),

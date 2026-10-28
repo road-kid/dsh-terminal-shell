@@ -18,6 +18,7 @@ export type RawConfig = BashLocalConfig & {
   readonly cmdCodePage: number
   readonly cmdConfinedPolicy: 'escalate' | 'unconfined'
   readonly minimalMode: 'leave' | 'oneshot' | 'variant'
+  readonly sidebarBash: 'system' | 'gitbash'
 }
 export type SkipReason =
   | 'not-win32'

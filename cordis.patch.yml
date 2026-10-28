@@ -7,6 +7,11 @@
 # to `pwsh`, which leaves every session on the platform's own terminal tool.
 # The switch is the client half's row in Settings -> General (`src/client/`),
 # which edits this entry's volatile Config through `configForms`.
+#
+# The interactive sidebar terminal's `bash` entry is driven from that same
+# settings row ("sidebar new terminal"): the plugin resolves this machine's Git
+# Bash at runtime and hands it to the core terminal-controller in memory, so no
+# executable path is ever pinned in this file.
 - insert:
     - id: terminal-shell
       name: dsh-terminal-shell

@@ -35,6 +35,21 @@ to translate them. The first version actually published under the new numbering 
 
 ## [Unreleased]
 
+### Added
+
+- **A new settings option decides which bash the sidebar's "New Terminal" menu uses.**
+  The interactive sidebar terminal is the core `terminal-controller`'s; its Shell menu is
+  built from `shellCandidates`, where every entry is a bare name resolved on PATH. On
+  Windows the bare name `bash` therefore reaches WSL's `System32` shim first, not the Git
+  Bash a Windows user expects. The settings row gains a final bash-block option,
+  「侧边栏终端」 (`sidebarBash`, `system` | `gitbash`, default `system`). Choosing
+  「本机 Git Bash」 makes the plugin resolve this machine's Git Bash at runtime through its
+  own `discoverBash()` sweep and hand `terminal-controller` a single `config.shell`
+  override **in memory** — no absolute executable path is pinned anywhere in the package
+  and nothing is written to the profile. The menu entry stays labelled `bash` (never
+  `bash.exe`) and launches the Git Bash; the plain WSL `bash` candidate is deduped away
+  (same `bash` executable kind). 「系统默认」 leaves the stock menu untouched.
+
 ## [0.2.1]
 
 ### Changed

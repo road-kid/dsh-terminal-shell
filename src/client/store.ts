@@ -4,6 +4,7 @@ import type {
   ConfinedPolicy,
   Dialect,
   MinimalMode,
+  SidebarBash,
   VariantStatus,
 } from '../shared/protocol.ts'
 import type { ConfigFormLike, FieldOp, FormSnapshot, TerminalToolValues, Translate } from './types.ts'
@@ -47,6 +48,8 @@ export interface RowState {
   readonly dialect: Dialect
   readonly confinedPolicy: ConfinedPolicy
   readonly minimalMode: MinimalMode
+  /** Which bash the interactive sidebar's New Terminal menu uses. */
+  readonly sidebarBash: SidebarBash
   readonly variant: VariantInfo
   readonly bashPath: string
   readonly savedCandidates: readonly string[]
@@ -84,6 +87,7 @@ export interface RowController {
   setDialect(dialect: Dialect): void
   setConfinedPolicy(policy: ConfinedPolicy): void
   setMinimalMode(mode: MinimalMode): void
+  setSidebarBash(mode: SidebarBash): void
   setBashPath(path: string): void
   setCmdPath(path: string): void
   setCmdCodePage(codePage: number): void
@@ -119,6 +123,7 @@ export const INITIAL_ROW_STATE: RowState = {
   dialect: 'pwsh',
   confinedPolicy: 'unconfined',
   minimalMode: 'oneshot',
+  sidebarBash: 'system',
   variant: { status: 'absent', id: 'minimal-gitbash', refs: 0 },
   bashPath: '',
   savedCandidates: [],
@@ -270,6 +275,11 @@ export function normalizeMinimalMode(value: unknown): MinimalMode {
   return value === 'leave' || value === 'variant' ? value : 'oneshot'
 }
 
+/** Narrow a wire value to the two sidebar-bash modes, defaulting to `system`. */
+export function normalizeSidebarBash(value: unknown): SidebarBash {
+  return value === 'gitbash' ? 'gitbash' : 'system'
+}
+
 /**
  * Build the controller for one mounted row.
  *
@@ -311,6 +321,7 @@ export function createRowController(
             dialect: normalizeDialect(value.dialect),
             confinedPolicy: normalizeConfinedPolicy(value.confinedPolicy),
             minimalMode: normalizeMinimalMode(value.minimalMode),
+            sidebarBash: normalizeSidebarBash(value.sidebarBash),
             bashPath: keepOptimistic && incomingBash === '' ? previous.bashPath : incomingBash,
             savedCandidates: value.bashCandidates ?? [],
             cmdPath: keepOptimistic && incomingCmd === '' ? previous.cmdPath : incomingCmd,
@@ -414,6 +425,18 @@ export function createRowController(
     const trimmed = path.trim()
     store.setState({ bashPath: trimmed, error: undefined, notice: undefined })
     write([{ op: 'set', path: ['bashPath'], value: trimmed }])
+  }
+
+  /**
+   * Persist the sidebar-bash choice.
+   *
+   * Optimistic like the other dropdowns: a rejected write is restored by the
+   * next form snapshot and surfaced as an error. The Host resolves the actual
+   * Git Bash from its own discovery inputs, so no executable path is stored.
+   */
+  const setSidebarBash = (mode: SidebarBash): void => {
+    store.setState({ sidebarBash: mode, error: undefined, notice: undefined })
+    write([{ op: 'set', path: ['sidebarBash'], value: mode }])
   }
 
   /**
@@ -546,6 +569,7 @@ export function createRowController(
                 bashPath: state.bashPath ?? '',
                 cmdPath: looksLikeCmd(state.cmdPath ?? '') ? (state.cmdPath ?? '') : '',
                 minimalMode: normalizeMinimalMode(state.minimalMode),
+                sidebarBash: normalizeSidebarBash(state.sidebarBash),
               }),
           // The variant lifecycle is Host-owned: never cached across a mount.
           // A Host that predates the field has none, so keep the empty state
@@ -582,6 +606,7 @@ export function createRowController(
     setDialect,
     setConfinedPolicy,
     setMinimalMode,
+    setSidebarBash,
     setBashPath,
     setCmdPath,
     setCmdCodePage,

@@ -46,10 +46,14 @@ DSH 在 Windows 上默认用一个 PowerShell（`pwsh`）终端工具承载智�
 | F13 | 失败只写诊断日志（`%TEMP%\dsh-terminal-shell.log`），不抛给会话 | `src/diag.ts` |
 | F14 | 为 MSYS/Python 注入 `PYTHONIOENCODING=utf-8`；cmd 侧 `chcp` 到配置代码页（默认 65001） | `src/executor.ts:168`、`src/cmd/executor.ts`、`src/cmd/script.ts:81` |
 | F15 | `cmdPath` 覆盖只接受真正的 `cmd.exe` | `src/cmd/discover.ts`（`isCmdExecutable`） |
+| F16 | 侧边栏「新建终端」菜单里的 `bash` 用哪个程序，由 bash 分组末尾的「侧边栏终端」（`sidebarBash`）决定；选「本机 Git Bash」时运行期解析本机 Git Bash 并在内存里给核心 `terminal-controller` 设 `config.shell` 覆盖 | `src/sidebar.ts`、`src/client/row.tsx`、`src/client/locales.ts` |
+
+> F16 不固定任何路径：本机 Git Bash 走本插件自己的 `discoverBash()`（注册表 / Program Files / PATH，硬排除 WSL）；拿到路径后**在内存里**把 `terminal-controller` 的 `config.shell` 覆盖成 `{ path, name: 'bash', args: ['-i'] }`——`resolveShell` 原样保留 `name`，所以菜单项标签仍是 `bash`（不是 `bash.exe`），启动的是本机 Git Bash；同属 `bash` 的裸候选被 `discoverShells` 去重丢弃。特意不走 `ctx.loader.update()`（那会触发 profile `Include.write()`，把机器相关路径写进 profile YAML）。选「系统默认」（`system`）或没有 Git Bash 时清除覆盖，恢复核心原有菜单。
 
 ### 2.3 明确不做
 
 - **不接管全局** `ctx.shell`：profile/host 级执行器始终是平台默认（`src/index.ts:27` 的注释即此约束）。
+- **不接管交互式侧边栏终端服务本身**：对侧边栏「新建终端」菜单的支持，只是运行期在内存里给核心 `terminal-controller` 一个 `config.shell` 覆盖（不改其代码、不持有其运行时状态、不落盘）；这是官方支持的单个 shell 覆盖，本插件只在用户选「本机 Git Bash」时把它指向运行期解析出的 Git Bash（§F16）。
 - **不修改任何 preset 文件**：需要持久 Git Bash 时在运行时派生一个新变体（§7）。
 - **不跨平台**：非 `win32` 时 `probeCapability` 返回不支持、设置行 `status` 置 `hidden`、`installSession` 直接 `skip(not-win32)`。
 - **不提供持久 `cmd` 终端**：cmd 只有一次性批处理执行。
@@ -356,7 +360,7 @@ cmd 方言**没有持久后端**，所以 cmd 的极简行只提供 `leave` 与 
 | 沙箱策略 | `row.confined.label` = 「沙箱策略」；`row.confined.unconfined` = 「绕过沙箱」、`row.confined.escalate` = 「申请权限」；说明 `row.confined.description`（`{shell}` 参数） | `Menu` |
 | 极简模式 | `row.minimal.label` = 「极简模式」；`row.minimal.leave/oneshot/variant` = 「保持 pwsh」/「单次 bash」/「添加新预设」 | `Menu` |
 | cmd 极简 | `row.minimal.cmdDescription`；`row.minimal.oneshotCmd` = 「单次 cmd」 | `Menu`（仅 leave/oneshot） |
-| cmd.exe 路径 | `row.cmdPath.label` = 「cmd.exe 路径」；`row.cmdPath.description`、`placeholder`、`invalid` | 路径控件 |
+| cmd.exe 路径 | `row.cmdPath.label` = 「cmd.exe 路径」；`placeholder`、`invalid`（path 行无 description，与 bash 路径行一致） | 路径控件 |
 | 代码页 | `row.cmdCodePage.label` = 「控制台代码页」；`row.cmdCodePage.description` | `Input` |
 | 状态文案 | `row.discovering` / `row.foundNone` / `row.notSupported` / `row.saveFailed` / `row.requestFailed` / `row.rejected` / `row.unavailable` | hint/error |
 | 变体提示 | `row.minimal.variantReady` / `variantRetained` / `variantFailed` | note/alert |
@@ -393,7 +397,7 @@ cmd 方言**没有持久后端**，所以 cmd 的极简行只提供 `leave` 与 
 
 ### 8.8 locale key 清单（完整，`src/client/locales.ts`）
 
-`row.title`、`row.description`、`row.dialect.label`、`row.dialect.pwsh`、`row.dialect.bash`、`row.dialect.cmd`、`row.path.label`、`row.path.placeholder`、`row.path.none`、`row.path.missing`、`row.confined.label`、`row.confined.description`、`row.confined.unconfined`、`row.confined.escalate`、`row.minimal.label`、`row.minimal.description`、`row.minimal.leave`、`row.minimal.oneshot`、`row.minimal.variant`、`row.minimal.cmdDescription`、`row.minimal.oneshotCmd`、`row.minimal.variantReady`、`row.minimal.variantRetained`、`row.minimal.variantFailed`、`row.cmdPath.label`、`row.cmdPath.description`、`row.cmdPath.placeholder`、`row.cmdPath.invalid`、`row.cmdCodePage.label`、`row.cmdCodePage.description`、`row.discovering`、`row.foundNone`、`row.notSupported`、`row.saveFailed`、`row.requestFailed`、`row.rejected`、`row.unavailable`。
+`row.title`、`row.description`、`row.dialect.label`、`row.dialect.pwsh`、`row.dialect.bash`、`row.dialect.cmd`、`row.path.label`、`row.path.placeholder`、`row.path.none`、`row.path.missing`、`row.confined.label`、`row.confined.description`、`row.confined.unconfined`、`row.confined.escalate`、`row.minimal.label`、`row.minimal.description`、`row.minimal.leave`、`row.minimal.oneshot`、`row.minimal.variant`、`row.minimal.cmdDescription`、`row.minimal.oneshotCmd`、`row.minimal.variantReady`、`row.minimal.variantRetained`、`row.minimal.variantFailed`、`row.cmdPath.label`、`row.cmdPath.placeholder`、`row.cmdPath.invalid`、`row.cmdCodePage.label`、`row.cmdCodePage.description`、`row.discovering`、`row.foundNone`、`row.notSupported`、`row.saveFailed`、`row.requestFailed`、`row.rejected`、`row.unavailable`。
 
 命名空间 `LOCALE_NAMESPACE = 'terminal-shell'`，与 profile entry id 一致，使 slot 的 `locale` 与 `label:()=>t('row.title')` 解析到同一本字典。
 
@@ -531,6 +535,7 @@ export interface VariantView { status: 'absent'|'registered'|'retained'|'failed'
 - **`src/pty.ts`** — `./pty` 入口（`terminal-shell-pty`）：构造 `BashTerminalBackend` 并注入 `spawnTerminal`，用 `ctx.effect(() => ctx.terminals.registerBackend(backend))` 绑定 fiber。单独入口，因为依赖 `@deepseek-ai/dsh-terminal-bash`（并非所有部署都有）。
 - **`src/preset.ts`** — `minimal-gitbash` 变体：`cloneMinimalForGitBash`、YAML（`!!js`）解析/序列化、`createVariantManager`、`resolveVariantSpec`。preset 文档操作与生命周期管理器，和会话替换解耦。
 - **`src/replace.ts`** — `installSession` + `installCmdSession`：两条安装路径、deny/section/回滚、`InstallResult`。会话替换的唯一实现；`testing.ts` re-export 它。
+- **`src/sidebar.ts`** — `applySidebarBash`：把「侧边栏终端」选择应用到核心 `terminal-controller`。`sidebarBash==='gitbash'` 时用 `discoverBash()` 解析本机 Git Bash（不固定路径）、在内存里给活的 service 设 `config.shell` 覆盖（不碰 `ctx.loader.update`，避免 profile 落盘）；其余情况清除覆盖。仅 win32 生效（§F16）。
 - **`src/routes.ts`** — `createHandlers`（纯函数）/`registerRoutes`：`/state`、`/discover`。读/扫表面，与写入（configForms）分离。
 - **`src/discover.ts`** — `discoverBash`（首个可用）/`scanBashCandidates`（全部）/`enumerateCandidates`；注册表 `reg.exe`、环境根、PATH 派生；排除 WSL。纯文件系统 + 一次廉价 `reg.exe`；与 cmd 的确定性解析是两套（§15）。
 - **`src/paths.ts`** — `bashInstallRoot`、`bashPathEntries`、`composePath`、`validateBashPath`、`isWslBash`、`candidateExecutables`、`pathKey`/`samePath`。路径算术独立可测（selftest 主战场）。

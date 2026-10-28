@@ -66,6 +66,7 @@ DSH 0.2.1-rc.2 的平台组合在 Windows 上是互斥的——bash 家族被 `!
 - `bash` / `cmd` 都会把被替换会话里的 `pwsh` 从工具目录隐藏（`cmd` 连继承来的 `bash` 也隐藏），并压空对应的 `tool:pwsh` 提示词段。
 - 超时、输出收集与溢出、abort 分类、后台作业、`sandbox_permissions` 升级、会话 cwd、工具卡片、退出码标记全部继承或复用官方实现。
 - `bash` 复用官方 `@deepseek-ai/dsh-tool-bash`；`cmd` 因为官方工具名与执行器都绑死在 `bash`/`pwsh` 上，用逐字移植的独立实现（见 [CMD 方言的限制](#cmd-方言的限制)）。
+- **同时让侧边栏交互终端用上本机 Git Bash。** bash 分组的最后多了一个「侧边栏终端」设置（`sidebarBash`），决定侧边栏 **新建终端 → Shell** 菜单里的 `bash` 启动哪个程序。选「本机 Git Bash」时，插件在运行期通过 `discoverBash()` 解析本机的 Git Bash（不固定任何路径），并把单一 `config.shell` 覆盖**在内存里**交给核心 `terminal-controller`，于是该菜单的 `bash` 项启动的是本机 Git Bash（MINGW64/MSYS2），而不是 WSL 的 `bash`。菜单标签始终是 `bash`（不会变成 `bash.exe`）。详见 [与其他插件共存](#与其他插件共存)。
 
 ### 工作原理：会话级隔离替换
 
@@ -112,14 +113,17 @@ npm pack
 #   C:\Users\<you>\.dsh\profiles\desktop\package.json
 ```
 
-插件包自带 `dsh.bundle.patch`（`package.json` 的 `dsh.bundle.patch = ./cordis.patch.yml`），profile 的组合层会读取它并插入：
+插件包自带 `dsh.bundle.patch`（`package.json` 的 `dsh.bundle.patch = ./cordis.patch.yml`），profile 的组合层会读取它，只插入一行：
 
 ```yaml
+# 插件自身的一行（智能体工具的方言）
 - insert:
     - id: terminal-shell
       name: dsh-terminal-shell
       disabled: !!js process.platform !== 'win32'
 ```
+
+补丁只插入这一行，别的什么都不做：`cordis.patch.yml` 里不固定任何可执行文件路径，因此在任何机器上都一样。
 
 - **`dialect` 默认 `pwsh`**：只装插件、不切方言，会话行为与官方完全一致。
 - **安装或升级后必须重启 DSH**：运行中插入的 row 只进组合树，插件的 `apply` 不会被调用。
@@ -159,12 +163,13 @@ cmd.exe 路径                              [C:/WINDOWS/system32/cmd.exe]
 | 路径（`bash`） | 「Git Bash 路径」，placeholder「例如 C:/Program Files/Git/bin/bash.exe」；为空且未扫描时提示「选择 Git Bash 后会自动扫描本机；也可以直接填入 bash.exe 的完整路径。」 | `bashPath` |
 | 沙箱策略（`bash`） | 「沙箱策略」，选项 `绕过沙箱`（`unconfined`）/ `申请权限`（`escalate`） | `confinedPolicy` |
 | 极简模式（`bash`） | 「极简模式」，选项 `保持 pwsh`（`leave`）/ `单次 bash`（`oneshot`）/ `添加新预设`（`variant`） | `minimalMode` |
-| 路径（`cmd`） | 「cmd.exe 路径」，placeholder「例如 C:/Windows/System32/cmd.exe」，说明「留空则自动使用系统 cmd.exe（%ComSpec%）。」 | `cmdPath` |
+| 侧边栏终端（`bash`，末行） | 「侧边栏终端」，说明「决定侧边栏「新建终端」菜单里 bash 使用哪个程序；系统默认会走 PATH 上的 bash（Windows 上通常是 WSL）。」，选项 `系统默认`（`system`）/ `本机 Git Bash`（`gitbash`） | `sidebarBash` |
+| 路径（`cmd`） | 「cmd.exe 路径」，placeholder「例如 C:/Windows/System32/cmd.exe」（无说明，与 bash 路径行一致） | `cmdPath` |
 | 沙箱策略（`cmd`） | 「沙箱策略」，选项与 `bash` 同一套：`绕过沙箱` / `申请权限` | `cmdConfinedPolicy` |
 | 极简模式（`cmd`） | 「极简模式」，选项 `保持 pwsh`（`leave`）/ `单次 cmd`（`oneshot`） | `minimalMode` |
 | 控制台代码页（`cmd`） | 「控制台代码页」，默认 `65001`，数字输入 | `cmdCodePage` |
 
-- **顺序**：`cmd` 与 `bash` 一致——路径 → 沙箱策略 → 极简模式（`cmd` 末尾多一行控制台代码页）。`bash` 专属字段（`loginShell` / `extraPath` / `pythonUtf8` / `bash` 的 `confinedPolicy`）在 `cmd` 下隐藏，反之亦然。
+- **顺序**：`cmd` 与 `bash` 一致——路径 → 沙箱策略 → 极简模式（`cmd` 末尾多一行控制台代码页）；`bash` 末尾还会多一行「侧边栏终端」。`bash` 专属字段（`loginShell` / `extraPath` / `pythonUtf8` / `bash` 的 `confinedPolicy`）在 `cmd` 下隐藏，反之亦然。
 - **方言下拉是一枚官方下拉触发器**，点开是官方 `Menu`，与官方段里所有枚举型偏好的渲染方式相同。
 
 ### 方言切换即扫描
@@ -287,6 +292,7 @@ cd /d "<工作目录>" 2>nul || (echo cmd: cannot enter the working directory 1>
 | `cmdCodePage` | `number` | `65001` | 脚本里 `chcp` 的代码页 |
 | `cmdConfinedPolicy` | `'escalate' \| 'unconfined'` | `'escalate'` | `cmd` 在受限档位下的处理方式 |
 | `minimalMode` | `'leave' \| 'oneshot' \| 'variant'` | `'oneshot'` | 官方 `minimal` 预设的处理方式 |
+| `sidebarBash` | `'system' \| 'gitbash'` | `'system'` | 侧边栏「新建终端」菜单里的 `bash` 启动哪个程序；`gitbash` 在运行期解析本机 Git Bash 并在内存里覆盖核心 controller，`system` 保持 PATH 原有菜单 |
 | `timeoutMs` | `number` | `120000` | 继承自官方 bash 执行器的单命令超时 |
 | `maxTimeoutMs` | `number` | `600000` | 允许的最大超时 |
 | `maxOutputBytes` | `number` | `64000` | 前台输出上限 |
@@ -362,6 +368,7 @@ src/cmd/          cmd 方言：types.ts 契约、script.ts 临时 .cmd 脚本传
 src/preset.ts     预设变体管理：克隆官方 minimal 行、注册 / 注销、引用计数
 src/pty.ts        dsh-terminal-shell/pty 入口：注册 gitbash 类型的持久终端后端
 src/replace.ts    每会话替换 + 逆序回滚（bash 与 cmd 两条装配路径）
+src/sidebar.ts    把侧边栏「新建终端」的 bash 选择在内存里应用到核心 terminal-controller
 src/diag.ts       诊断日志
 src/routes.ts     两条 /api 路由：/state 与 /discover（都不写配置）
 src/shared/protocol.ts  Host/客户端共享的线路协议（路由路径、常量、视图类型）
@@ -412,13 +419,13 @@ npm run check         # 依次跑下面所有测试
 |---|---|
 | 设置行 slot | `settings.general.item`，id `terminal-shell`，order `60` |
 | locale 命名空间 | `terminal-shell` |
-| bundle 行 id | `terminal-shell`（`cordis.patch.yml`） |
+| bundle 行 id | `terminal-shell`（插入，`cordis.patch.yml`） |
 | Host 路由 | `/api/dsh-terminal-shell/state`、`/api/dsh-terminal-shell/discover` |
 | 会话内工具 | `bash` 方言：替换 `bash`、隐藏 `pwsh`；`cmd` 方言：新增 `cmd`、隐藏 `pwsh` 与 `bash`（仅被替换的会话） |
 
-- **不写全局**：不改 `ctx.shell`、不改任何已加载的 preset、不写宿主安装目录。
+- **不写全局**：不改 `ctx.shell`、不改任何已加载的 preset、不写宿主安装目录，也不在 `cordis.patch.yml` 里固定任何可执行文件路径。当 `sidebarBash` 为 `gitbash` 时，它在内存里给核心 `terminal-controller` 一个 `config.shell` 覆盖（从不落盘）；`system` 时完全不碰该 controller。
 - **与另一个 Git Bash 插件（如 `dsh-gitbash-shell`）同时安装**：两者都想替换会话的 `bash` 工具。本插件在发现同 scope 已有 `bash` 工具时跳过替换（`already-replaced`），但**不区分**那个 `bash` 是否来自本插件。只装一个即可。
-- **与 UI 插件（侧边栏 / 快捷键等）**：只在设置页占用一行、一个 locale 命名空间，无其它 DOM 或全局状态。
+- **与 UI 插件（侧边栏 / 快捷键等）**：只在设置页占用一行、一个 locale 命名空间；运行期可能（仅在 `sidebarBash` 为 `gitbash` 时）在内存里设置核心 `terminal-controller` 的 `config.shell`，无其它 DOM 或运行时全局状态。若另一个插件也配置 `terminal-controller`，以生成时实际生效的那份 config 为准。
 - **热禁用**：禁用插件后，已按 Git Bash / cmd 装配的会话不会切回 `pwsh`；新会话恢复官方终端工具；变体预设随插件一起注销。
 
 ---

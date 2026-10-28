@@ -74,6 +74,16 @@ export type CmdConfinedPolicy = 'escalate' | 'unconfined'
 export type VariantStatus = 'absent' | 'registered' | 'retained' | 'failed'
 
 /**
+ * Which `bash` the interactive sidebar's New Terminal menu uses.
+ *
+ * - `system`: leave the core terminal-controller's PATH-resolved menu alone
+ *   (on Windows the bare `bash` is the WSL launcher).
+ * - `gitbash`: resolve this machine's Git Bash at runtime and hand it to the
+ *   live controller as an explicit `bash` override (label stays `bash`).
+ */
+export type SidebarBash = 'system' | 'gitbash'
+
+/**
  * Variant state as reported to the settings row.
  *
  * `retained` means the option is no longer `variant` but the definition was kept
@@ -157,6 +167,8 @@ export interface StateView {
   readonly capability: CapabilityView
   /** How the official `minimal` preset is treated. */
   readonly minimalMode: MinimalMode
+  /** Which bash the interactive sidebar's New Terminal menu uses. */
+  readonly sidebarBash: SidebarBash
   /** Current preset-variant state (also drives the third option's hint). */
   readonly variant: VariantView
   readonly lastReplace?: ReplaceReport

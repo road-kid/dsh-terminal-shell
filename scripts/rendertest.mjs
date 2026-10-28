@@ -446,7 +446,7 @@ await test('a bash row with at most one known path types it into an Input', asyn
     const input = view.host.querySelector('input[aria-label="Git Bash 路径"]')
     assert.ok(input, 'the path is a text field')
     assert.equal(input.value, 'C:\\Git\\bin\\bash.exe')
-    assert.equal(view.triggers().length, 3, 'dialect, confined and minimal are menus; the path is an Input')
+    assert.equal(view.triggers().length, 4, 'dialect, confined, minimal and sidebar-bash are menus; the path is an Input')
     assert.doesNotMatch(view.text(), /点「自动发现」扫描本机/)
   } finally {
     await view.unmount()
@@ -496,7 +496,7 @@ await test('choosing Git Bash scans, then the path control becomes a dropdown of
     await click(view.menuItems()[1])
     // Two hits turn the path control into a dropdown; the dialect and confined
     // ones stay.
-    assert.equal(view.triggers().length, 4, 'the path control is now a dropdown too')
+    assert.equal(view.triggers().length, 5, 'the path control is now a dropdown too')
     const trigger = view.trigger('Git Bash 路径')
     assert.match(trigger.textContent ?? '', /C:\\Git\\bin\\bash\.exe/)
     // First write: the dialect. Second: the pick and the candidate list, together.
@@ -569,7 +569,7 @@ await test('a read-only form locks the dropdown and the path field', async () =>
   const row = mountRow({ form, state: READY_STATE, discover: { candidates: [] } })
   const view = await render(row.component, row.props)
   try {
-    assert.equal(view.triggers().length, 3)
+    assert.equal(view.triggers().length, 4)
     assert.equal(view.trigger('终端类型').disabled, true, 'a non-writable form disables the dropdown')
     assert.equal(view.trigger('沙箱策略').disabled, true, 'and the sandbox-policy one')
     assert.equal(view.host.querySelector('input[aria-label="Git Bash 路径"]').disabled, true)
@@ -609,7 +609,9 @@ await test('choosing cmd reveals the cmd fields and hides the bash ones', async 
     await click(view.menuItems()[2])
     const text = view.text()
     assert.match(text, /cmd\.exe 路径/)
-    assert.match(text, /留空则自动使用系统 cmd\.exe/)
+    // No description under the cmd path row: it is aligned with the bash path
+    // row, which only shows a transient hint (never a permanent sentence).
+    assert.doesNotMatch(text, /留空则自动使用系统 cmd\.exe/)
     assert.match(text, /控制台代码页/)
     // Bash-only fields are gone, not greyed out. The minimal row stays: keeping
     // the official pwsh terminal vs. a one-shot cmd is a real choice for cmd.

@@ -108,6 +108,7 @@ export function createHandlers(deps: RouteDeps): {
       bashCandidates: snapshot.bashCandidates,
       capability: deps.capability(),
       minimalMode: snapshot.minimalMode,
+      sidebarBash: snapshot.sidebarBash,
       variant: deps.variant(),
       ...(lastReplace === undefined ? {} : { lastReplace }),
     }

@@ -129,7 +129,6 @@ await test('client bundle ships the terminal-shell row markup, copy and routes',
     'row.minimal.variantRetained',
     'row.minimal.variantFailed',
     'row.cmdPath.label',
-    'row.cmdPath.description',
     'row.cmdPath.invalid',
     'row.cmdCodePage.label',
     'row.discovering',
@@ -198,6 +197,7 @@ await test('Config validates and every plugin field is volatile', async () => {
     'cmdPath',
     'cmdCodePage',
     'cmdConfinedPolicy',
+    'sidebarBash',
   ]) {
     assert.equal(typeof value[field]?.get, 'function', `${field} must be volatile`)
   }

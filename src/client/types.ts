@@ -55,6 +55,7 @@ export interface TerminalToolValues {
   readonly cmdPath?: string
   readonly cmdCodePage?: number
   readonly cmdConfinedPolicy?: 'escalate' | 'unconfined'
+  readonly sidebarBash?: 'system' | 'gitbash'
 }
 
 /** A locale dictionary. */

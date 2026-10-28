@@ -66,6 +66,7 @@ All three dialects share one settings row and one config; only the tool, the exe
 - Both `bash` / `cmd` hide `pwsh` from the replaced session's tool catalog (`cmd` also hides the inherited `bash`), and blank out the matching `tool:pwsh` prompt section.
 - Timeouts, output collection and spill, abort classification, background jobs, `sandbox_permissions` escalation, session cwd, tool cards and exit-code markers are all inherited from or reuse the official implementation.
 - `bash` reuses the official `@deepseek-ai/dsh-tool-bash`; because the official tool name and executor are both hard-wired to `bash`/`pwsh`, `cmd` uses a verbatim-ported standalone implementation (see [cmd dialect limitations](#cmd-dialect-limitations)).
+- **Also lets the sidebar's interactive terminal use this machine's Git Bash.** A setting at the end of the bash block, 「侧边栏终端」 (`sidebarBash`), decides which `bash` the sidebar **New Terminal → Shell** menu launches. With 「本机 Git Bash」 the plugin resolves this machine's Git Bash at runtime (`discoverBash()`, no pinned path) and hands the core `terminal-controller` a single `config.shell` override in memory, so that menu's `bash` entry launches this profile's Git Bash (MINGW64/MSYS2) instead of WSL's `bash`. The label stays `bash` (never `bash.exe`). See [Coexisting with other plugins](#coexisting-with-other-plugins) for the footprint.
 
 ### How it works: per-session isolated replacement
 
@@ -112,14 +113,17 @@ npm pack
 #   C:\Users\<you>\.dsh\profiles\desktop\package.json
 ```
 
-The package ships its own `dsh.bundle.patch` (`dsh.bundle.patch = ./cordis.patch.yml` in `package.json`); the profile's composition layer reads it and inserts:
+The package ships its own `dsh.bundle.patch` (`dsh.bundle.patch = ./cordis.patch.yml` in `package.json`); the profile's composition layer reads it and inserts one row:
 
 ```yaml
+# the plugin's own row (agent-tool dialect)
 - insert:
     - id: terminal-shell
       name: dsh-terminal-shell
       disabled: !!js process.platform !== 'win32'
 ```
+
+The patch inserts that single row and nothing else: no executable path is pinned in `cordis.patch.yml`, so the file is identical on every machine.
 
 - **`dialect` defaults to `pwsh`**: install the plugin without switching the dialect and session behavior is identical to the official one.
 - **You must restart DSH after install or upgrade**: a row inserted at runtime only enters the composition tree; the plugin's `apply` is not called.
@@ -159,12 +163,13 @@ The row layout matches the official General-section settings rows: a left column
 | Path (`bash`) | "Git Bash path", placeholder "e.g. C:/Program Files/Git/bin/bash.exe"; when empty and unscanned, the hint "Choosing Git Bash scans this machine; you can also type the full path to bash.exe." | `bashPath` |
 | Sandbox policy (`bash`) | "Sandbox policy", options `Bypass the sandbox` (`unconfined`) / `Request permission` (`escalate`) | `confinedPolicy` |
 | Minimal mode (`bash`) | "Minimal mode", options `Keep pwsh` (`leave`) / `One-shot bash` (`oneshot`) / `Add a new preset` (`variant`) | `minimalMode` |
-| Path (`cmd`) | "cmd.exe path", placeholder "e.g. C:/Windows/System32/cmd.exe", description "Leave empty to use the system cmd.exe (%ComSpec%)." | `cmdPath` |
+| Sidebar terminal (`bash`, last) | "Sidebar terminal", description "Which bash the sidebar New Terminal uses; the system default is the PATH bash (WSL on Windows).", options `System default` (`system`) / `Local Git Bash` (`gitbash`) | `sidebarBash` |
+| Path (`cmd`) | "cmd.exe path", placeholder "e.g. C:/Windows/System32/cmd.exe" (no description, aligned with the bash path row) | `cmdPath` |
 | Sandbox policy (`cmd`) | "Sandbox policy", the same two options as `bash`: `Bypass the sandbox` / `Request permission` | `cmdConfinedPolicy` |
 | Minimal mode (`cmd`) | "Minimal mode", options `Keep pwsh` (`leave`) / `One-shot cmd` (`oneshot`) | `minimalMode` |
 | Console code page (`cmd`) | "Console code page", default `65001`, numeric input | `cmdCodePage` |
 
-- **Order**: `cmd` matches `bash` — path → sandbox policy → minimal mode (`cmd` adds one console-code-page row at the end). The `bash`-only fields (`loginShell` / `extraPath` / `pythonUtf8` / the `bash` `confinedPolicy`) are hidden under `cmd`, and vice versa.
+- **Order**: `cmd` matches `bash` — path → sandbox policy → minimal mode (`cmd` adds one console-code-page row at the end); `bash` additionally ends with the **Sidebar terminal** row. The `bash`-only fields (`loginShell` / `extraPath` / `pythonUtf8` / the `bash` `confinedPolicy`) are hidden under `cmd`, and vice versa.
 - **The dialect dropdown is an official dropdown trigger**, opening an official `Menu`, rendered the same way as every enumerated preference in the official section.
 
 ### Switching the dialect triggers a scan
@@ -287,6 +292,7 @@ Every field is `.volatile()` and handed to the official `configForms` by the hos
 | `cmdCodePage` | `number` | `65001` | The code page for `chcp` in the script |
 | `cmdConfinedPolicy` | `'escalate' \| 'unconfined'` | `'escalate'` | How `cmd` behaves under the restricted tier |
 | `minimalMode` | `'leave' \| 'oneshot' \| 'variant'` | `'oneshot'` | How the official `minimal` preset is treated |
+| `sidebarBash` | `'system' \| 'gitbash'` | `'system'` | Which `bash` the sidebar **New Terminal** menu launches; `gitbash` resolves this machine's Git Bash at runtime and overrides the core controller in memory, `system` leaves the stock PATH menu |
 | `timeoutMs` | `number` | `120000` | Per-command timeout, inherited from the official bash executor |
 | `maxTimeoutMs` | `number` | `600000` | Maximum allowed timeout |
 | `maxOutputBytes` | `number` | `64000` | Foreground output cap |
@@ -362,6 +368,7 @@ src/cmd/          cmd dialect: types.ts contract, script.ts temporary .cmd scrip
 src/preset.ts     Preset variant management: clone the official minimal rows, register / unregister, refcount
 src/pty.ts        dsh-terminal-shell/pty entry: register the gitbash-type persistent terminal backend
 src/replace.ts    Per-session replacement + reverse rollback (the bash and cmd assembly paths)
+src/sidebar.ts    Apply the sidebar New-Terminal bash choice to the core terminal-controller in memory
 src/diag.ts       Diagnostic log
 src/routes.ts     Two /api routes: /state and /discover (neither writes config)
 src/shared/protocol.ts  Wire protocol shared by host/client (route paths, constants, view types)
@@ -412,13 +419,13 @@ This plugin's footprint (all prefixed `terminal-shell` / `dsh-terminal-shell`; o
 |---|---|
 | Settings row slot | `settings.general.item`, id `terminal-shell`, order `60` |
 | locale namespace | `terminal-shell` |
-| bundle row id | `terminal-shell` (`cordis.patch.yml`) |
+| bundle row id | `terminal-shell` (inserted, `cordis.patch.yml`) |
 | Host routes | `/api/dsh-terminal-shell/state`, `/api/dsh-terminal-shell/discover` |
 | In-session tools | `bash` dialect: replaces `bash`, hides `pwsh`; `cmd` dialect: adds `cmd`, hides `pwsh` and `bash` (only in the replaced session) |
 
-- **Writes no global state**: does not touch `ctx.shell`, touches no loaded preset, writes nothing into the host install directory.
+- **Writes no global state**: does not touch `ctx.shell`, touches no loaded preset, writes nothing into the host install directory, and pins no executable path in `cordis.patch.yml`. When `sidebarBash` is `gitbash` it hands the core `terminal-controller` an in-memory `config.shell` override (never persisted); `system` leaves that controller untouched.
 - **Installed alongside another Git Bash plugin (e.g. `dsh-gitbash-shell`)**: both want to replace the session's `bash` tool. This plugin skips replacement when it finds a `bash` tool already in the same scope (`already-replaced`), but does **not** distinguish whether that `bash` came from this plugin. Install just one.
-- **With UI plugins (sidebar / shortcuts, etc.)**: it occupies only one settings row and one locale namespace; no other DOM or global state.
+- **With UI plugins (sidebar / shortcuts, etc.)**: it occupies one settings row and one locale namespace; at runtime it may set the core `terminal-controller`'s `config.shell` in memory (only when `sidebarBash` is `gitbash`), but writes no other DOM or runtime global state. If another plugin also configures `terminal-controller`, whichever config object is live at spawn time wins.
 - **Hot disable**: after disabling the plugin, sessions already assembled for Git Bash / cmd do not switch back to `pwsh`; new sessions return to the official terminal tool; the variant preset is unregistered along with the plugin.
 
 ---

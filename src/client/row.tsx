@@ -12,12 +12,13 @@ import {
   knownCmdPaths,
   knownPaths,
   normalizeDialect,
+  normalizeSidebarBash,
   type Dialect,
   type MinimalMode,
   type RowController,
   type RowState,
 } from './store.ts'
-import type { CmdConfinedPolicy, ConfinedPolicy } from '../shared/protocol.ts'
+import type { CmdConfinedPolicy, ConfinedPolicy, SidebarBash } from '../shared/protocol.ts'
 import type { RowProps } from './types.ts'
 
 /**
@@ -322,6 +323,13 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
     { id: 'leave', label: t('row.minimal.leave') },
     { id: 'oneshot', label: t('row.minimal.oneshotCmd') },
   ]
+  // Sidebar New-Terminal bash choice. Ends the bash block: it is the last, most
+  // "environment" flavoured decision, and it only affects the interactive
+  // sidebar terminal (not the tool the agent uses).
+  const sidebarBashItems: readonly MenuEntry[] = [
+    { id: 'system', label: t('row.sidebarBash.system') },
+    { id: 'gitbash', label: t('row.sidebarBash.gitbash') },
+  ]
 
   return (
     <div className="tterm-group" data-dsh-terminal-shell="row">
@@ -439,6 +447,26 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
               />
             </div>
           ) : null}
+
+          <div className="tterm-row">
+            <div className="tterm-text">
+              <div className="tterm-field-label">{t('row.sidebarBash.label')}</div>
+              <div className="tterm-description">{t('row.sidebarBash.description')}</div>
+            </div>
+
+            <Selector
+              className="tterm-dialect"
+              label={t('row.sidebarBash.label')}
+              value={t(`row.sidebarBash.${state.sidebarBash}`)}
+              items={sidebarBashItems}
+              selectedId={state.sidebarBash}
+              disabled={!controlsEnabled}
+              onSelect={(id) => {
+                const next: SidebarBash = normalizeSidebarBash(id)
+                if (next !== state.sidebarBash) controller.setSidebarBash(next)
+              }}
+            />
+          </div>
         </>
       ) : null}
 
@@ -446,7 +474,6 @@ export function TerminalToolRow({ t, form }: RowProps): ReactElement | null {
         <>
           <PathRow
             label={t('row.cmdPath.label')}
-            description={t('row.cmdPath.description')}
             hint={state.discovering ? t('row.discovering') : undefined}
             inputId={CMD_PATH_CONTROL_ID}
             placeholder={t('row.cmdPath.placeholder')}
